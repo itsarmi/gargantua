@@ -59,7 +59,7 @@ A real-time WebGL simulation of Gargantua, the supermassive black hole from *Int
 ## How to run
 
 ```
-git clone https://github.com/your-username/gargantua.git
+git clone https://github.com/itsarmi/gargantua.git
 open gargantua.html
 ```
 
