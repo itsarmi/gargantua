@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Gargantua</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { overflow:hidden; background:#000; }
+canvas { display:block; touch-action:none; }
+
+#hint {
+  position:fixed; bottom:28px; width:100%; text-align:center;
+  color:rgba(255,255,255,0.32); font:13px/1.6 -apple-system,sans-serif;
+  pointer-events:none; transition:opacity 2.5s ease;
+  text-shadow:0 0 12px rgba(0,0,0,0.9);
+}
+
+/* ── Terminal tooltip ── */
+#tooltip {
+  position:fixed; pointer-events:none; z-index:200; width:312px;
+  background:rgba(5,2,1,0.97);
+  border:1px solid rgba(210,110,15,0.65);
+  box-shadow:0 0 30px rgba(200,100,10,0.18),0 0 60px rgba(200,100,10,0.06);
+  border-radius:2px; padding:14px 16px 16px;
+  font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;
+  font-size:11.5px; line-height:1.65; color:#c0a068;
+  opacity:0; transform:translateY(6px);
+  transition:opacity 0.2s ease,transform 0.2s ease;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.04) 3px,rgba(0,0,0,0.04) 4px);
+}
+#tooltip.visible { opacity:1; transform:translateY(0); }
+.tt-header { display:flex; align-items:center; gap:7px; margin-bottom:8px; }
+.tt-prompt  { color:#e07820; font-size:13px; line-height:1; }
+.tt-title   { color:#ffd060; font-size:11.5px; font-weight:700; letter-spacing:0.12em; flex:1; }
+.tt-tag     { font-size:9px; color:#5a3010; border:1px solid #3a1a04; padding:1px 5px 1px 4px; border-radius:1px; letter-spacing:0.08em; white-space:nowrap; }
+.tt-sep     { border:none; border-top:1px solid #251508; margin:0 0 10px; }
+.tt-desc    { color:#d0a860; min-height:3.6em; margin-bottom:10px; }
+.tt-facts-label { color:#4a3010; font-size:9.5px; letter-spacing:0.2em; margin-bottom:6px; }
+.tt-fact    { color:#907040; padding-left:2px; margin:3px 0; opacity:0; transform:translateY(4px); transition:opacity 0.28s ease,transform 0.28s ease; }
+.tt-fact.show { opacity:1; transform:translateY(0); }
+.tt-fact::before { content:'◆  '; color:#b05010; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.tt-cursor { display:inline; color:#e07820; animation:blink 0.9s step-end infinite; }
+@keyframes charIn { from{opacity:0} to{opacity:1} }
+.tt-newchar { display:inline; animation:charIn 0.18s ease-out forwards; }
+
+/* ── Story mode (inside horizon) — bottom-center subtitle style ── */
+#fly-info.fi-centered {
+  left:50% !important; bottom:3% !important; top:auto !important;
+  transform:translateX(-50%) translateY(10px) !important;
+  width:580px !important; max-width:90vw !important;
+  font-size:12px !important; line-height:1.75 !important;
+  border-color:rgba(210,110,15,0.80) !important;
+  box-shadow:0 0 60px rgba(200,100,10,0.30),0 0 120px rgba(200,100,10,0.10) !important;
+}
+#fly-info.fi-centered.visible {
+  opacity:1 !important; transform:translateX(-50%) translateY(0) !important;
+}
+
+/* ── Approach info panel (terminal style, bottom-left during fly-in) ── */
+#fly-info {
+  position:fixed; left:20px; bottom:22px; z-index:300; width:340px;
+  background:rgba(5,2,1,0.97);
+  border:1px solid rgba(210,110,15,0.65);
+  box-shadow:0 0 30px rgba(200,100,10,0.18),0 0 60px rgba(200,100,10,0.06);
+  border-radius:2px; padding:13px 15px 15px;
+  font-family:'SF Mono','Menlo','Consolas','Courier New',monospace;
+  font-size:11.5px; line-height:1.65; color:#c0a068;
+  opacity:0; transform:translateY(8px);
+  transition:opacity 0.3s ease, transform 0.3s ease;
+  pointer-events:none;
+  background-image:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.04) 3px,rgba(0,0,0,0.04) 4px);
+  display:none;
+}
+#fly-info.visible { opacity:1; transform:translateY(0); }
+
+/* ── Fly-in HUD ── */
+#fly-hud {
+  position:fixed; top:20px; left:50%; transform:translateX(-50%);
+  background:rgba(4,2,0,0.93); border:1px solid rgba(220,110,10,0.55);
+  border-radius:2px; padding:12px 20px 14px; min-width:290px;
+  font-family:'SF Mono','Menlo',monospace; font-size:11.5px; color:#d09040;
+  display:none; z-index:200; box-shadow:0 0 24px rgba(200,100,0,0.12);
+}
+#fly-hud-title { color:#ffc060; font-size:10.5px; letter-spacing:0.18em; margin-bottom:10px; }
+.hud-row { display:flex; justify-content:space-between; gap:24px; margin:4px 0; }
+.hud-row span:first-child { color:#5a4020; font-size:10px; letter-spacing:0.08em; }
+.hud-row span:last-child  { color:#ffb030; font-weight:700; }
+#abort-btn {
+  margin-top:11px; width:100%; background:rgba(160,50,0,0.3);
+  border:1px solid rgba(200,70,0,0.55); color:#ffa050;
+  font-family:inherit; font-size:10px; letter-spacing:0.14em;
+  padding:5px 0; cursor:pointer; border-radius:1px; transition:background 0.2s;
+}
+#abort-btn:hover { background:rgba(200,70,0,0.5); }
+#speed-btn {
+  margin-top:6px; width:100%; background:rgba(10,40,80,0.35);
+  border:1px solid rgba(60,140,220,0.45); color:#80c0ff;
+  font-family:inherit; font-size:10px; letter-spacing:0.14em;
+  padding:5px 0; cursor:pointer; border-radius:1px; transition:background 0.2s, border-color 0.2s;
+}
+#speed-btn:hover { background:rgba(20,60,120,0.55); }
+#speed-btn.fast { background:rgba(10,70,30,0.40); border-color:rgba(60,220,120,0.55); color:#60ffaa; }
+
+/* ── Elapsed timer (bottom-left) ── */
+#fly-timer {
+  position:fixed; bottom:62px; left:20px; z-index:200;
+  display:none;
+  font-family:'SF Mono','Menlo',monospace; font-size:11px; letter-spacing:0.18em;
+  color:#ffb030; background:rgba(0,0,0,0.55);
+  border:1px solid rgba(210,110,10,0.35); border-radius:3px;
+  padding:5px 10px; pointer-events:none;
+}
+#fly-timer span { color:#5a4020; font-size:9px; letter-spacing:0.12em; display:block; margin-bottom:2px; }
+#fly-timer b { font-size:15px; letter-spacing:0.1em; font-weight:700; }
+
+/* ── Approach button ── */
+#fly-btn {
+  position:fixed; bottom:20px; left:20px; z-index:200;
+  background:rgba(0,0,0,0.6); border:1px solid rgba(210,110,10,0.45);
+  border-radius:2px; color:rgba(210,135,40,0.8);
+  font-family:'SF Mono','Menlo',monospace; font-size:10.5px; letter-spacing:0.1em;
+  padding:7px 14px; cursor:pointer; transition:border-color 0.2s,color 0.2s;
+}
+#fly-btn:hover { border-color:rgba(255,155,20,0.9); color:#ffb030; }
+
+/* ── Sound button ── */
+#sound-btn {
+  position:fixed; bottom:20px; right:20px; z-index:200;
+  background:rgba(0,0,0,0.55); border:1px solid rgba(210,110,10,0.35);
+  border-radius:4px; color:rgba(255,255,255,0.55); font-size:15px;
+  width:34px; height:34px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; transition:border-color 0.2s;
+}
+#sound-btn:hover { border-color:rgba(255,155,20,0.7); }
+
+/* ── Event horizon crossing overlay (brief flash only) ── */
+#horizon-overlay {
+  position:fixed; inset:0; background:#000; opacity:0;
+  transition:opacity 0.6s ease; pointer-events:none; z-index:500;
+}
+
+/* ── Playback controls (bottom-right, near audio) ── */
+#playback-controls {
+  position:fixed; bottom:20px; right:62px; z-index:200;
+  display:none; flex-direction:row; gap:6px; align-items:center;
+}
+#playback-controls button {
+  background:rgba(0,0,0,0.55); border:1px solid rgba(210,110,10,0.35);
+  border-radius:4px; color:rgba(255,255,255,0.55); font-size:13px;
+  width:34px; height:34px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center;
+  transition:border-color 0.2s, background 0.2s, color 0.2s;
+  font-family:inherit;
+}
+#playback-controls button:hover { border-color:rgba(255,155,20,0.7); }
+#pause-btn.active  { border-color:rgba(60,220,120,0.65); color:#60ffaa; background:rgba(10,60,30,0.55); }
+#fast-btn2.active  { border-color:rgba(60,140,220,0.65); color:#80c0ff; background:rgba(10,30,70,0.55); }
+#slow-btn.active   { border-color:rgba(220,160,60,0.65); color:#ffc060; background:rgba(60,35,5,0.55);  }
+#rewind-btn.active { border-color:rgba(220,80,80,0.65);  color:#ff8080; background:rgba(70,10,10,0.55); }
+
+/* ── Dream button ── */
+#dream-btn {
+  position:fixed; bottom:62px; right:20px; z-index:200;
+  background:rgba(0,0,0,0.55); border:1px solid rgba(120,100,210,0.45);
+  border-radius:4px; color:rgba(200,180,255,0.75); font-size:15px;
+  width:34px; height:34px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; transition:border-color 0.2s,color 0.2s;
+}
+#dream-btn:hover { border-color:rgba(180,140,255,0.9); color:#d8c0ff; }
+
+/* ── Dreaming overlay ── */
+#dream-overlay {
+  position:fixed; inset:0; z-index:1000; display:none;
+  opacity:0; transition:opacity 0.6s ease;
+  background:transparent; pointer-events:none;
+}
+#dream-overlay.visible { opacity:1; }
+#dream-exit {
+  pointer-events:all;
+  position:absolute; top:22px; right:22px; z-index:10;
+  background:rgba(0,0,0,0.6); border:1px solid rgba(200,180,255,0.35);
+  border-radius:4px; color:rgba(200,180,255,0.7); font-size:12px;
+  padding:6px 14px; cursor:pointer; letter-spacing:0.14em;
+  font-family:'SF Mono','Menlo',monospace;
+  transition:border-color 0.2s,color 0.2s;
+}
+#dream-exit:hover { border-color:rgba(200,180,255,0.8); color:#d8c0ff; }
+#dream-label {
+  position:absolute; top:22px; left:50%; transform:translateX(-50%);
+  color:rgba(200,180,255,0.22); font-size:11px; letter-spacing:0.35em;
+  font-family:'SF Mono','Menlo',monospace; pointer-events:none;
+}
+
+/* ── Inside-horizon message overlay ── */
+#inside-msg {
+  position:fixed; bottom:22%; left:50%; transform:translateX(-50%);
+  text-align:center; pointer-events:none; z-index:600;
+  opacity:0; transition:opacity 1.0s ease;
+  font-family:'SF Mono','Menlo','Consolas',monospace;
+}
+.im-l1 { color:#ffd060; font-size:13px; letter-spacing:0.22em; margin-bottom:9px; }
+.im-l2 { color:rgba(255,185,80,0.55); font-size:10.5px; letter-spacing:0.10em; }
+
+#fly-credit {
+  position:fixed; bottom:6%; width:100%; text-align:center;
+  pointer-events:none; z-index:602;
+  opacity:0; transition:opacity 2.5s ease;
+  font-family:'SF Mono','Menlo',monospace;
+  font-size:10px; letter-spacing:0.30em; color:rgba(255,210,160,0.55);
+}
+</style>
+</head>
+<body>
+
+<div id="hint">Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Hover to explore</div>
+
+<div id="tooltip">
+  <div class="tt-header">
+    <span class="tt-prompt">›</span>
+    <span class="tt-title" id="tt-title"></span>
+    <span class="tt-tag"   id="tt-tag"></span>
+  </div>
+  <hr class="tt-sep">
+  <div class="tt-desc" id="tt-desc"></div>
+  <div class="tt-facts-label">FACTS://</div>
+  <div id="tt-facts"></div>
+</div>
+
+<div id="fly-hud">
+  <div id="fly-hud-title">◈ &nbsp;APPROACH SEQUENCE ACTIVE</div>
+  <div class="hud-row"><span>YOUR TIME</span><span id="hud-proper">00:00:00.00</span></div>
+  <div class="hud-row"><span>OUTSIDE TIME</span><span id="hud-coord">00:00:00.00</span></div>
+  <div class="hud-row"><span>TIME DILATION</span><span id="hud-dilation">×1.00</span></div>
+  <div class="hud-row"><span>DIST. TO HORIZON</span><span id="hud-dist">—</span></div>
+  <div class="hud-row"><span>TIME ON EARTH</span><span id="hud-earth">—</span></div>
+  <button id="abort-btn">ABORT APPROACH</button>
+</div>
+
+<div id="fly-timer"><span>ELAPSED</span><b id="fly-timer-val">00:00</b></div>
+<button id="fly-btn">◈ &nbsp;APPROACH HORIZON</button>
+<div id="playback-controls">
+  <button id="rewind-btn" title="Rewind (2×)">⏪</button>
+  <button id="slow-btn"   title="Slow down (½×)">🐢</button>
+  <button id="pause-btn"  title="Pause / Resume">⏸</button>
+  <button id="fast-btn2"  title="Fast forward (4×)">⏩</button>
+</div>
+<button id="dream-btn" title="Dreaming mode">🌌</button>
+<button id="sound-btn" title="Toggle audio">🔇</button>
+
+<div id="dream-overlay">
+  <button id="dream-exit">EXIT</button>
+</div>
+
+<div id="horizon-overlay"></div>
+<div id="fly-credit">Created by Armi &nbsp;·&nbsp; Friday 08. of May 2026</div>
+
+<div id="fly-info">
+  <div class="tt-header">
+    <span class="tt-prompt">›</span>
+    <span class="tt-title" id="fi-title"></span>
+    <span class="tt-tag"   id="fi-tag"></span>
+  </div>
+  <hr class="tt-sep">
+  <div class="tt-desc"        id="fi-desc"></div>
+  <div class="tt-facts-label">OBS://</div>
+  <div id="fi-facts"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three":        "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.js",
+    "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE            from 'three';
+import { OrbitControls }     from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer }    from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass }        from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass }        from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass }   from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+// ═══════════════════════════════════════════════
+// CONCEPT DATA
+// ═══════════════════════════════════════════════
+const CONCEPTS = {
+  horizon: {
+    title:'EVENT HORIZON', tag:'SPACETIME',
+    desc:'The point of no return. Once crossed, escape velocity exceeds the speed of light — nothing, not even photons, can ever get back out.',
+    facts:["Gargantua's radius ≈ 150 million km — roughly 1 AU",
+           '1 hour near the horizon = ~7 Earth years pass outside',
+           'No physical wall exists — you cross it without noticing',
+           'First black hole "imaged": M87*, April 10, 2019'],
+  },
+  photon: {
+    title:'PHOTON SPHERE', tag:'RELATIVISTIC',
+    desc:'At 1.5× the event horizon radius, gravity bends spacetime so sharply that light can orbit the black hole in a perfect — but unstable — circle.',
+    facts:['Photons here orbit at exactly the speed of light',
+           'The orbit is unstable: photons spiral in or escape',
+           'An observer here would see the back of their own head',
+           'Unique to black holes and neutron stars'],
+  },
+  disk: {
+    title:'ACCRETION DISK', tag:'PLASMA',
+    desc:'Superheated plasma spiraling inward at up to 30% the speed of light. The approaching side glows bluer and brighter; the receding side dims and reddens.',
+    facts:['Inner-edge temperature can exceed 10 million Kelvin',
+           'Emits X-rays powerful enough to detect across galaxies',
+           "Gargantua's disk is inclined ~60° to Earth's line of sight",
+           "Relativistic beaming makes one side ~4× brighter than the other"],
+  },
+  lensing: {
+    title:'GRAVITATIONAL LENSING', tag:'OPTICS',
+    desc:"Gargantua's mass warps spacetime itself, bending light from distant stars. The entire background sky compresses into a luminous Einstein ring.",
+    facts:['First confirmed experimentally: 1919 solar eclipse',
+           'Strong lensing can produce multiple images of one star',
+           'Light looping the BH multiple times creates nested rings',
+           "The lensing here is ~10¹⁰× stronger than the Sun's"],
+  },
+};
+
+// ═══════════════════════════════════════════════
+// RENDERER + CAMERA
+// ═══════════════════════════════════════════════
+const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.85;
+document.body.appendChild(renderer.domElement);
+
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 600);
+camera.position.set(0, 1.5, 13);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = 0.055;
+controls.minDistance = 2.4; controls.maxDistance = 50;
+controls.autoRotate = true; controls.autoRotateSpeed = 0.18;
+renderer.domElement.addEventListener('pointerdown', () => { controls.autoRotate = false; }, { once:true });
+
+// ═══════════════════════════════════════════════
+// STARS
+// ═══════════════════════════════════════════════
+{
+  // Realistic stellar population: O/B blue-white, F/A white, G yellow, K orange, M red
+  const N=28000, pos=new Float32Array(N*3), sz=new Float32Array(N), col=new Float32Array(N*3);
+  for (let i=0;i<N;i++) {
+    const th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1), r=110+Math.random()*90;
+    // Concentrate slightly toward galactic plane (y≈0) for realism
+    const galBias = Math.exp(-Math.abs(Math.sin(ph))*3.5)*0.6;
+    const r2 = 110 + Math.random()*90 + galBias*20;
+    pos[i*3]=r2*Math.sin(ph)*Math.cos(th); pos[i*3+1]=r2*Math.sin(ph)*Math.sin(th); pos[i*3+2]=r2*Math.cos(ph);
+    sz[i]=0.18+Math.random()*1.2;
+    const rng=Math.random();
+    if      (rng<0.06){ col[i*3]=0.65; col[i*3+1]=0.80; col[i*3+2]=1.00; } // O/B blue
+    else if (rng<0.18){ col[i*3]=0.92; col[i*3+1]=0.95; col[i*3+2]=1.00; } // A/F white
+    else if (rng<0.42){ col[i*3]=1.00; col[i*3+1]=0.94; col[i*3+2]=0.72; } // G yellow
+    else if (rng<0.70){ col[i*3]=1.00; col[i*3+1]=0.65; col[i*3+2]=0.32; } // K orange
+    else              { col[i*3]=1.00; col[i*3+1]=0.30; col[i*3+2]=0.12; } // M red dwarf
+  }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('aSize',   new THREE.BufferAttribute(sz,1));
+  geo.setAttribute('aColor',  new THREE.BufferAttribute(col,3));
+  scene.add(new THREE.Points(geo, new THREE.ShaderMaterial({
+    depthWrite:false, blending:THREE.AdditiveBlending, transparent:true,
+    vertexShader:  `attribute float aSize; attribute vec3 aColor; varying vec3 vCol;
+                    void main(){ vCol=aColor; vec4 mv=modelViewMatrix*vec4(position,1.0); gl_PointSize=aSize*(280.0/-mv.z); gl_Position=projectionMatrix*mv; }`,
+    fragmentShader:`varying vec3 vCol; void main(){ float d=length(gl_PointCoord-0.5); if(d>0.5)discard; gl_FragColor=vec4(vCol,smoothstep(0.5,0.02,d)); }`,
+  })));
+}
+
+// ═══════════════════════════════════════════════
+// NEBULA BACKGROUND
+// ═══════════════════════════════════════════════
+// Pure black deep space — no nebula. Faint galactic plane dust glow along y≈0.
+scene.add(new THREE.Mesh(new THREE.SphereGeometry(200,32,32), new THREE.ShaderMaterial({
+  side:THREE.BackSide, depthWrite:false, uniforms:{},
+  vertexShader:  `varying vec3 vD; void main(){ vD=normalize(position); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`varying vec3 vD;
+    void main(){
+      float gp = exp(-vD.y*vD.y*12.0) * 0.018; // galactic plane glow
+      vec3 col = vec3(0.0, 0.0, 0.0);
+      col += vec3(gp*0.55, gp*0.38, gp*0.20);   // warm dust tone
+      gl_FragColor = vec4(col, 1.0);
+    }`,
+})));
+
+// ═══════════════════════════════════════════════
+// EVENT HORIZON
+// ═══════════════════════════════════════════════
+const BH_R   = 1.0;
+const bhMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(BH_R,64,64),
+  new THREE.MeshBasicMaterial({ color:0x000000 })
+);
+scene.add(bhMesh);
+
+// ═══════════════════════════════════════════════
+// PHOTON-SPHERE RIM GLOW
+// ═══════════════════════════════════════════════
+const glowMat = new THREE.ShaderMaterial({
+  uniforms:{ camPos:{ value:camera.position } },
+  transparent:true, blending:THREE.AdditiveBlending, depthWrite:false,
+  vertexShader:  `uniform vec3 camPos; varying float rim; void main(){ vec3 wn=normalize((modelMatrix*vec4(normal,0.0)).xyz); vec3 wd=normalize(camPos-(modelMatrix*vec4(position,1.0)).xyz); rim=pow(1.0-clamp(dot(wn,wd),0.0,1.0),2.8); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`varying float rim; void main(){ vec3 col=mix(vec3(0.6,0.25,0.02),vec3(1.0,0.82,0.42),rim); gl_FragColor=vec4(col*rim*2.5,rim*0.80); }`,
+});
+const glowMesh = new THREE.Mesh(new THREE.SphereGeometry(BH_R*1.32,64,64), glowMat);
+scene.add(glowMesh);
+
+// ═══════════════════════════════════════════════
+// ACCRETION DISK  (volumetric layers + Doppler)
+// ═══════════════════════════════════════════════
+const DISK_INNER = BH_R*1.28, DISK_OUTER = BH_R*7.0;
+const diskGeo    = new THREE.RingGeometry(DISK_INNER, DISK_OUTER, 320, 96);
+
+// Shared uniforms — one object, all layers react automatically
+const uTime   = { value:0.0 };
+const uCamPos = { value:camera.position }; // live Vector3 reference
+
+const DISK_VERT = `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`;
+const DISK_FRAG = `
+uniform float time;
+uniform vec3  camPos;
+uniform float alphaScale;
+varying vec2  vUv;
+
+float h(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.545); }
+float n(vec2 p){
+  vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);
+}
+// 6-octave FBM for large-scale MRI eddies
+float fbm(vec2 p){
+  return n(p)*0.500 + n(p*2.1+1.3)*0.250 + n(p*4.5+2.7)*0.125
+       + n(p*9.1+5.2)*0.063 + n(p*18.3+7.9)*0.031 + n(p*37.0+13.1)*0.016;
+}
+
+void main(){
+  float r = vUv.y;
+  float a = vUv.x*6.28318;
+  float omega = 0.55/max(r*2.0+0.3, 0.4);
+  float swirl = a - r*3.2 + time*omega;
+
+  // ── Large-scale turbulent eddies ──
+  vec2 uv1 = vec2(swirl*1.3, r*6.5);
+  float turb = fbm(uv1);
+
+  // ── Orbital filaments ──
+  vec2 uv2 = vec2(swirl*5.5, r*22.0);
+  float fil = fbm(uv2 + vec2(time*0.008, 0.0));
+  fil = pow(max(0.0, fil), 4.0) * 4.5;    // very sharp streaks
+
+  // ── Fine grain (dominant layer) ──
+  vec2 uv3 = vec2(swirl*10.0 + turb*1.8, r*28.0);
+  float grain = n(uv3)*0.50 + n(uv3*2.4+3.1)*0.30 + n(uv3*5.3+7.2)*0.20;
+  grain = pow(max(0.0, grain - 0.34) * 1.70, 2.8); // hard cutoff → isolated bright speckles
+
+  // ── Extra fine static ──
+  vec2 uv5 = vec2(swirl*22.0 + r*0.5, r*55.0);
+  float static_ = pow(max(0.0, n(uv5) - 0.42)*1.8, 2.0);
+
+  // ── Density clumps ──
+  vec2 uv4 = vec2(swirl*2.6 + fbm(uv1*0.6)*1.2, r*11.0);
+  float clump = smoothstep(0.55, 0.92, fbm(uv4)) * 1.0;
+
+  // Very grain-heavy — the smooth base is barely visible
+  float density = turb*0.08 + fil*0.16 + grain*0.46 + static_*0.14 + clump*0.16;
+
+  // Physically-based colour: inner ~10^6K = blue-white → yellow-white → amber outer
+  vec3 cHot =vec3(0.82,0.91,1.00); // blue-white (UV plasma, visible tail)
+  vec3 cWarm=vec3(1.00,0.96,0.88); // white-yellow (intermediate)
+  vec3 cMid =vec3(1.00,0.65,0.14); // golden-amber
+  vec3 cCool=vec3(0.48,0.14,0.02); // dark amber outer edge
+  vec3 col=mix(cHot, cWarm,smoothstep(0.00,0.14,r));
+      col=mix(col,  cMid, smoothstep(0.10,0.45,r));
+      col=mix(col,  cCool,smoothstep(0.30,1.00,r));
+  // Dense clumps locally hotter → whiter/bluer cores
+  col = mix(col, vec3(0.88,0.94,1.0), clamp(clump*0.5, 0.0, 0.42));
+
+  float bright=(1.0-r*0.70)*(0.04 + density*1.25); // near-zero base: only grain lights up
+  bright*=smoothstep(0.0,0.042,r);
+  bright*=smoothstep(1.0,0.75,r);
+
+  // ── Relativistic Doppler beaming ──
+  vec2 camXZ  = length(camPos.xz)>0.01 ? normalize(camPos.xz) : vec2(0.0,1.0);
+  vec2 tang   = vec2(-sin(a), cos(a));
+  float vdc   = dot(tang, camXZ);
+  float beta  = 0.42*(1.0-r*0.38);      // faster near ISCO, ~0.4c
+  float dBoost= pow(max(0.04,1.0+beta*vdc),4.0); // 4th power = more extreme contrast
+  float blue  = max(0.0, vdc*beta*0.80); // approaching side blueshifts hard
+  float red   = max(0.0,-vdc*beta*0.65); // receding side redshifts visibly
+  col += vec3(-blue*0.10,-blue*0.02, blue*0.18);
+  col += vec3( red*0.14, -red*0.04, -red*0.10);
+  col  = clamp(col,0.0,2.0);
+  bright *= dBoost;
+
+  gl_FragColor=vec4(col*bright, bright*0.95*alphaScale);
+}`;
+
+function makeDiskMesh(yOff, scale, alpha) {
+  const mat = new THREE.ShaderMaterial({
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide,
+    uniforms:{ time:uTime, camPos:uCamPos, alphaScale:{ value:alpha } },
+    vertexShader:DISK_VERT, fragmentShader:DISK_FRAG,
+  });
+  const mesh = new THREE.Mesh(diskGeo, mat);
+  mesh.rotation.x = Math.PI/2;
+  mesh.position.y = yOff;
+  mesh.scale.setScalar(scale);
+  scene.add(mesh);
+  return mesh;
+}
+
+// Main disk + thin volumetric haze (flat, Interstellar-style)
+const diskMesh = makeDiskMesh(0,    1.00, 1.00);
+                 makeDiskMesh( 0.04, 0.99, 0.28);
+                 makeDiskMesh(-0.04, 0.99, 0.28);
+                 makeDiskMesh( 0.10, 0.97, 0.10);
+                 makeDiskMesh(-0.10, 0.97, 0.10);
+
+// ═══════════════════════════════════════════════
+// BACK-OF-DISK LENSING ARC  (secondary image)
+// Light from the far side of the disk is bent
+// around the black hole and appears as thin bright
+// arcs near the shadow edge — above and below.
+// ═══════════════════════════════════════════════
+const ARC_FRAG = `
+uniform float time;
+uniform vec3  camPos;
+uniform float alphaScale;
+varying vec2 vUv;
+
+float h(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.545); }
+float n(vec2 p){
+  vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);
+}
+float fbm(vec2 p){ return n(p)*0.5+n(p*2.1+1.3)*0.25+n(p*4.5+2.7)*0.125+n(p*9.1+5.2)*0.0625; }
+
+void main(){
+  // vUv.x = angle around ring (0..1), vUv.y = radial (0..1 inner→outer)
+  float r = vUv.y;                           // 0=inner edge, 1=outer
+  float a = vUv.x * 6.28318 + 3.14159;      // offset PI → back of disk
+
+  // Turbulent texture (shared with main disk)
+  vec2 uv2 = vec2(cos(a)*r, sin(a)*r)*1.9 + vec2(0.0,0.0);
+  float turb = fbm(uv2 + vec2(time*0.022, time*0.018)) * 0.65
+             + fbm(uv2*2.3 - vec2(time*0.031, 0.0))    * 0.35;
+
+  // Lensed image: slightly cooler/dimmer than direct image
+  vec3 cHot = vec3(1.00, 0.94, 0.82);
+  vec3 cMid = vec3(1.00, 0.60, 0.12);
+  vec3 cCool= vec3(0.40, 0.12, 0.01);
+  vec3 col  = mix(cHot, cMid, smoothstep(0.00, 0.40, r));
+       col  = mix(col,  cCool,smoothstep(0.30, 1.00, r));
+
+  // Concentrated at inner edge (arc hugs the shadow)
+  float bright = (1.0 - r*0.78) * (0.30 + turb*0.90);
+  bright *= smoothstep(0.0,  0.06, r);
+  bright *= smoothstep(1.0,  0.72, r);
+  bright *= 2.2;                             // secondary image is concentrated/bright
+
+  // Doppler from opposite side: approaching side is now the far side
+  vec2 camXZ = length(camPos.xz)>0.01 ? normalize(camPos.xz) : vec2(0.0,1.0);
+  vec2 tang  = vec2(-sin(a), cos(a));
+  float vdc  = -dot(tang, camXZ);           // flipped: far side kinematics
+  float beta = 0.27*(1.0-r*0.5);
+  float dBoost = pow(max(0.07, 1.0+beta*vdc), 3.0);
+  float blue = max(0.0, vdc*beta*0.55);
+  float red  = max(0.0,-vdc*beta*0.44);
+  col += vec3(-blue*0.06,-blue*0.01, blue*0.11);
+  col += vec3( red*0.09, -red*0.03, -red*0.07);
+  col  = clamp(col,0.0,2.0);
+  bright *= dBoost;
+
+  gl_FragColor = vec4(col*bright, bright*0.88*alphaScale);
+}`;
+
+// Arc geometry: tight to shadow, secondary image hugs just outside photon ring
+const arcGeo = new THREE.RingGeometry(BH_R*1.05, BH_R*2.8, 256, 6);
+
+function makeArcMesh(yOff, alpha) {
+  const mat = new THREE.ShaderMaterial({
+    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false, side:THREE.DoubleSide,
+    uniforms:{ time:uTime, camPos:uCamPos, alphaScale:{ value:alpha } },
+    vertexShader:DISK_VERT, fragmentShader:ARC_FRAG,
+  });
+  const mesh = new THREE.Mesh(arcGeo, mat);
+  mesh.rotation.x = Math.PI/2;
+  mesh.position.y = yOff;
+  scene.add(mesh);
+  return mesh;
+}
+
+// Top arc (above disk plane) and bottom arc (below) — camera elevation adjusts which is brighter
+const topArcMesh = makeArcMesh( BH_R*1.20, 0.75);
+const botArcMesh = makeArcMesh(-BH_R*1.20, 0.55);
+
+// ═══════════════════════════════════════════════
+// POST-PROCESSING:  Bloom  →  Lensing
+// ═══════════════════════════════════════════════
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), 0.7, 0.45, 0.18);
+composer.addPass(bloomPass);
+
+const lensingPass = new ShaderPass({
+  uniforms:{
+    tDiffuse: { value:null },
+    bhUV:     { value:new THREE.Vector2(0.5,0.5) },
+    bhScreenR:{ value:0.05 },
+    strength: { value:0.38 },
+    aspect:   { value:innerWidth/innerHeight },
+    behind:   { value:0.0 },
+  },
+  vertexShader:  `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    uniform sampler2D tDiffuse;
+    uniform vec2 bhUV; uniform float bhScreenR,strength,aspect,behind;
+    varying vec2 vUv;
+    void main(){
+      if(behind>0.5){ gl_FragColor=texture2D(tDiffuse,vUv); return; }
+      vec2 delta=vUv-bhUV; delta.x*=aspect;
+      float dist=length(delta); delta.x/=aspect;
+      if(dist<bhScreenR*0.68){
+        gl_FragColor=vec4(0.0,0.0,0.0,1.0);
+      } else {
+        float lens=strength*bhScreenR*bhScreenR/max(dist*dist,1e-6);
+        lens=min(lens,0.22);
+        gl_FragColor=texture2D(tDiffuse,clamp(vUv-normalize(delta)*lens,0.001,0.999));
+      }
+    }`,
+});
+composer.addPass(lensingPass);
+
+// ─── Inside-horizon aberration pass ───────────
+// Simulates relativistic aberration as you fall through the event horizon:
+// the entire outside universe collapses into a shrinking bright circle.
+const insidePass = new ShaderPass({
+  uniforms:{
+    tDiffuse:{ value:null },
+    insideT: { value:0.0 },
+    aspect:  { value:innerWidth/innerHeight },
+  },
+  vertexShader:`varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
+  fragmentShader:`
+    uniform sampler2D tDiffuse;
+    uniform float insideT, aspect;
+    varying vec2 vUv;
+    void main(){
+      if(insideT<=0.0){ gl_FragColor=texture2D(tDiffuse,vUv); return; }
+      float t=clamp(insideT,0.0,1.0);
+
+      // Einstein aberration ring: outside universe shrinks to a point above
+      vec2 ringCtr=vec2(0.5,0.60);
+      vec2 d=vUv-ringCtr; d.x*=aspect;
+      float dist=length(d);
+
+      // Ring radius: 0.30 → 0.008 as singularity approaches
+      float ringR=mix(0.30,0.008,pow(t,0.50));
+
+      vec4 result;
+      if(dist<ringR){
+        // Remap ring interior to full-frame sample (compressed outside universe)
+        vec2 mapped=d/ringR; mapped.x/=aspect;
+        mapped=mapped*0.44+0.5;
+        mapped=clamp(mapped,0.001,0.999);
+        vec4 outside=texture2D(tDiffuse,mapped);
+
+        // Relativistic blueshift — light piles up to shorter wavelengths
+        float bs=mix(1.0,5.5,smoothstep(0.05,0.70,t));
+        outside.rgb*=bs*vec3(0.58,0.78,1.00);
+        outside.rgb=clamp(outside.rgb,0.0,6.0);
+
+        // Bright photon ring at the edge of the aberration circle
+        float ef=1.0-smoothstep(0.70,1.0,dist/ringR);
+        outside.rgb+=vec3(0.25,0.52,1.0)*ef*2.2*(1.0-t*0.45);
+
+        result=outside;
+      } else {
+        // Inside BH: absolute darkness with faint warm disk-light halo
+        float halo=exp(-pow((dist-ringR)/max(ringR*0.30,0.008),2.0));
+        halo*=(1.0-smoothstep(0.0,0.50,t))*0.7;
+        result=vec4(halo*0.55,halo*0.19,halo*0.04,1.0);
+      }
+
+      // Blend-in over first 0.8% of sequence (~1.3 seconds)
+      result=mix(texture2D(tDiffuse,vUv),result,smoothstep(0.0,0.008,t));
+
+      // Singularity: searing white flash, then pure black
+      if(t>0.76){
+        float flash=smoothstep(0.76,0.89,t)*(1.0-smoothstep(0.89,0.97,t));
+        result.rgb=mix(result.rgb,vec3(2.2,1.9,1.5),flash);
+        result.rgb*=(1.0-smoothstep(0.93,1.0,t));
+      }
+      gl_FragColor=result;
+    }`,
+});
+composer.addPass(insidePass);
+
+// ═══════════════════════════════════════════════
+// RAYCASTER + HOVER ZONE DETECTION
+// ═══════════════════════════════════════════════
+const raycaster = new THREE.Raycaster();
+const _camDir   = new THREE.Vector3();
+const _bhWorld  = new THREE.Vector3();
+const _ndc      = new THREE.Vector3();
+
+function getConceptAt(mx, my) {
+  bhMesh.getWorldPosition(_bhWorld);
+  camera.getWorldDirection(_camDir);
+  const isBehind = _bhWorld.clone().sub(camera.position).dot(_camDir) < 0;
+
+  const nx=(mx/innerWidth)*2-1, ny=(my/innerHeight)*-2+1;
+  raycaster.setFromCamera({x:nx,y:ny}, camera);
+  const diskHit = raycaster.intersectObjects(scene.children.filter(o=>o.geometry===diskGeo)).length>0;
+
+  if (isBehind) return diskHit ? 'disk' : null;
+
+  _ndc.copy(_bhWorld).project(camera);
+  const bhPx=(_ndc.x+1)*0.5*innerWidth, bhPy=(1-(_ndc.y+1)*0.5)*innerHeight;
+  const pixDist = Math.hypot(mx-bhPx, my-bhPy);
+  const halfFov = camera.fov*0.5*(Math.PI/180);
+  const bhPxR   = Math.atan(BH_R/camera.position.distanceTo(_bhWorld))/halfFov*innerHeight*0.5;
+
+  if (pixDist < bhPxR*1.15)  return 'horizon';
+  if (diskHit)                return 'disk';
+  if (pixDist < bhPxR*2.6)   return 'photon';
+  if (pixDist > bhPxR*5.5)   return 'lensing';
+  return null;
+}
+
+// ═══════════════════════════════════════════════
+// TOOLTIP LOGIC
+// ═══════════════════════════════════════════════
+const ttEl    = document.getElementById('tooltip');
+const ttTitle = document.getElementById('tt-title');
+const ttTag   = document.getElementById('tt-tag');
+const ttDesc  = document.getElementById('tt-desc');
+const ttFacts = document.getElementById('tt-facts');
+let activeConcept=null, hoverDelay=null, typeTimer=null;
+
+function posTooltip(mx,my){
+  const TW=326,TH=280,pad=8,off=18;
+  let x=mx+off,y=my+off;
+  if(x+TW>innerWidth-pad)  x=mx-TW-off;
+  if(y+TH>innerHeight-pad) y=my-TH-off;
+  ttEl.style.left=Math.max(pad,x)+'px'; ttEl.style.top=Math.max(pad,y)+'px';
+}
+function typewrite(text,speed,onDone){
+  clearTimeout(typeTimer); let i=0;
+  ttDesc.innerHTML='<span class="tt-cursor">▌</span>';
+  function tick(){
+    if(i<text.length){
+      const prev=text.slice(0,i), ch=text[i]; i++;
+      ttDesc.innerHTML=prev+'<span class="tt-newchar">'+ch+'</span><span class="tt-cursor">▌</span>';
+      playKeyClick();
+      typeTimer=setTimeout(tick,speed);
+    } else { ttDesc.textContent=text; if(onDone)onDone(); }
+  }
+  tick();
+}
+function showTooltip(concept,mx,my){
+  const d=CONCEPTS[concept]; if(!d)return;
+  ttTitle.textContent=d.title; ttTag.textContent=d.tag;
+  ttDesc.textContent=''; ttFacts.innerHTML='';
+  posTooltip(mx,my); ttEl.classList.add('visible');
+  const spd=Math.max(20,Math.min(38,1200/d.desc.length));
+  typewrite(d.desc,spd,()=>{
+    d.facts.forEach((f,i)=>setTimeout(()=>{
+      const dv=document.createElement('div'); dv.className='tt-fact'; dv.textContent=f;
+      ttFacts.appendChild(dv); requestAnimationFrame(()=>requestAnimationFrame(()=>dv.classList.add('show')));
+    },i*130));
+  });
+}
+function hideTooltip(){
+  ttEl.classList.remove('visible'); clearTimeout(typeTimer); clearTimeout(hoverDelay);
+  ttFacts.innerHTML=''; activeConcept=null;
+}
+
+document.addEventListener('mousemove',e=>{
+  if(flyActive||insidePhase||dreamActive){ if(activeConcept)hideTooltip(); return; }
+  const concept=getConceptAt(e.clientX,e.clientY);
+  if(concept!==activeConcept){
+    clearTimeout(hoverDelay); if(activeConcept)hideTooltip();
+    activeConcept=concept;
+    if(concept) hoverDelay=setTimeout(()=>showTooltip(concept,e.clientX,e.clientY),380);
+  } else if(activeConcept&&ttEl.classList.contains('visible')){
+    posTooltip(e.clientX,e.clientY);
+  }
+});
+document.addEventListener('mouseleave',hideTooltip);
+
+let touchOrigin=null,touchHideTimer=null;
+renderer.domElement.addEventListener('touchstart',e=>{
+  if(e.touches.length!==1)return;
+  touchOrigin={x:e.touches[0].clientX,y:e.touches[0].clientY};
+},{passive:true});
+renderer.domElement.addEventListener('touchend',e=>{
+  if(flyActive||insidePhase) return;
+  if(!touchOrigin||e.changedTouches.length!==1)return;
+  const t=e.changedTouches[0],o=touchOrigin; touchOrigin=null;
+  if(Math.hypot(t.clientX-o.x,t.clientY-o.y)>12)return;
+  clearTimeout(touchHideTimer); hideTooltip(); activeConcept=null;
+  const concept=getConceptAt(t.clientX,t.clientY);
+  if(concept){ activeConcept=concept; showTooltip(concept,t.clientX,t.clientY); touchHideTimer=setTimeout(hideTooltip,5000); }
+},{passive:true});
+
+// ═══════════════════════════════════════════════
+// FLY-IN MODE
+// ═══════════════════════════════════════════════
+let flyActive=false, flyT=0.0;
+let flyStartR=0, flyStartTheta=0, flyStartPhi=0;
+let properTime=0, coordTime=0, earthTime=0;
+let insidePhase=false, insideT=0.0;
+let flySpeedMult=1, flyPaused=false;
+let flyElapsed=0; // real seconds elapsed (pause-aware, rewind-aware)
+let insideMsgTimers=[];
+const flyTimerEl  =document.getElementById('fly-timer');
+const flyTimerVal =document.getElementById('fly-timer-val');
+
+// ── Approach info panel ──────────────────────────
+const fiEl    = document.getElementById('fly-info');
+const fiTitle = document.getElementById('fi-title');
+const fiTag   = document.getElementById('fi-tag');
+const fiDesc  = document.getElementById('fi-desc');
+const fiFacts = document.getElementById('fi-facts');
+let fiHideTimer=null, fiTypeTimer=null, fiVisible=false;
+
+function playKeyClick(){
+  if(!audioCtx||audioMuted) return;
+  const t0=audioCtx.currentTime;
+
+  if(insidePhase){
+    // Soft two-tone blip — quick attack, short gentle tail
+    const osc1=audioCtx.createOscillator();
+    osc1.type='sine'; osc1.frequency.setValueAtTime(196,t0);
+    osc1.frequency.linearRampToValueAtTime(188,t0+0.55);
+    const osc2=audioCtx.createOscillator();
+    osc2.type='sine'; osc2.frequency.setValueAtTime(294,t0);
+    const g1=audioCtx.createGain();
+    g1.gain.setValueAtTime(0,t0);
+    g1.gain.linearRampToValueAtTime(0.006,t0+0.04);
+    g1.gain.exponentialRampToValueAtTime(0.0001,t0+0.65);
+    const g2=audioCtx.createGain();
+    g2.gain.setValueAtTime(0,t0);
+    g2.gain.linearRampToValueAtTime(0.0025,t0+0.05);
+    g2.gain.exponentialRampToValueAtTime(0.0001,t0+0.45);
+    osc1.connect(g1); g1.connect(audioCtx.destination);
+    osc2.connect(g2); g2.connect(audioCtx.destination);
+    osc1.start(t0); osc1.stop(t0+0.70);
+    osc2.start(t0); osc2.stop(t0+0.50);
+    return;
+  }
+
+  // Approach: sharp sine chirp
+  const osc=audioCtx.createOscillator();
+  osc.type='sine';
+  osc.frequency.setValueAtTime(1100,t0);
+  osc.frequency.exponentialRampToValueAtTime(520,t0+0.032);
+  const g=audioCtx.createGain();
+  g.gain.setValueAtTime(0,t0);
+  g.gain.linearRampToValueAtTime(0.028,t0+0.003);
+  g.gain.exponentialRampToValueAtTime(0.0001,t0+0.055);
+  osc.connect(g); g.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0+0.060);
+}
+function playKeyClickFade(){
+  if(!audioCtx||audioMuted) return;
+  const t0=audioCtx.currentTime;
+  // Warm triangle wave at randomised pitch — like a fading transmission from far away
+  const freq = 155 + Math.random()*90; // 155–245 Hz, different every keystroke
+  const osc=audioCtx.createOscillator();
+  osc.type='triangle';
+  osc.frequency.setValueAtTime(freq, t0);
+  osc.frequency.exponentialRampToValueAtTime(freq*0.91, t0+0.09);
+  const g=audioCtx.createGain();
+  g.gain.setValueAtTime(0, t0);
+  g.gain.linearRampToValueAtTime(0.016, t0+0.011);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0+0.42);
+  // Faint perfect-fifth harmonic adds depth without harshness
+  const osc2=audioCtx.createOscillator();
+  osc2.type='sine';
+  osc2.frequency.setValueAtTime(freq*1.5, t0);
+  osc2.frequency.exponentialRampToValueAtTime(freq*1.5*0.94, t0+0.06);
+  const g2=audioCtx.createGain();
+  g2.gain.setValueAtTime(0, t0);
+  g2.gain.linearRampToValueAtTime(0.005, t0+0.008);
+  g2.gain.exponentialRampToValueAtTime(0.0001, t0+0.22);
+  osc.connect(g);   g.connect(audioCtx.destination);
+  osc2.connect(g2); g2.connect(audioCtx.destination);
+  osc.start(t0);  osc.stop(t0+0.45);
+  osc2.start(t0); osc2.stop(t0+0.24);
+}
+
+function hideFlyInfo(){
+  if(flyPaused){ clearTimeout(fiHideTimer); fiHideTimer=setTimeout(hideFlyInfo,300); return; }
+  fiVisible=false;
+  fiEl.classList.remove('visible');
+  setTimeout(()=>{ if(!fiVisible) fiEl.style.display='none'; },350);
+  clearTimeout(fiHideTimer); clearTimeout(fiTypeTimer);
+}
+function showFlyInfo(title,tag,desc,facts,durationMs,charSpd,clickFn){
+  fiVisible=true;
+  clearTimeout(fiHideTimer); clearTimeout(fiTypeTimer);
+  fiTitle.textContent=title; fiTag.textContent=tag;
+  fiDesc.innerHTML='<span class="tt-cursor">▌</span>';
+  fiFacts.innerHTML='';
+  fiEl.style.display='block';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{ if(fiVisible) fiEl.classList.add('visible'); }));
+  const click=clickFn||playKeyClick;
+  if(charSpd===0){
+    // Instant display: show full text immediately, one sound, facts fade in
+    fiDesc.textContent=desc;
+    click();
+    facts.forEach((f,fi)=>setTimeout(()=>{
+      const dv=document.createElement('div'); dv.className='tt-fact'; dv.textContent=f;
+      fiFacts.appendChild(dv);
+      requestAnimationFrame(()=>requestAnimationFrame(()=>dv.classList.add('show')));
+    },fi*500));
+    fiHideTimer=setTimeout(hideFlyInfo,durationMs);
+    return;
+  }
+  let i=0; const spd=charSpd||Math.max(48,Math.min(80,1400/desc.length));
+  function tw(){
+    if(flyPaused){ fiTypeTimer=setTimeout(tw,120); return; }
+    if(i<desc.length){
+      const prev=desc.slice(0,i), ch=desc[i]; i++;
+      fiDesc.innerHTML=prev+'<span class="tt-newchar">'+ch+'</span><span class="tt-cursor">▌</span>';
+      click();
+      fiTypeTimer=setTimeout(tw,spd);
+    } else {
+      fiDesc.textContent=desc;
+      facts.forEach((f,fi)=>setTimeout(()=>{
+        const dv=document.createElement('div'); dv.className='tt-fact'; dv.textContent=f;
+        fiFacts.appendChild(dv);
+        requestAnimationFrame(()=>requestAnimationFrame(()=>dv.classList.add('show')));
+        click();
+      },fi*(charSpd?700:420)));
+      fiHideTimer=setTimeout(hideFlyInfo,durationMs);
+    }
+  }
+  tw();
+}
+function clearInsideMsgs(){
+  insideMsgTimers.forEach(clearTimeout); insideMsgTimers=[];
+  hideFlyInfo();
+}
+
+// ── Approach milestones ──────────────────────────
+const FLY_MILESTONES=[
+  { r:10.8, done:false,
+    title:'ACCRETION DISK', tag:'PLASMA',
+    desc:'Superheated plasma spiraling inward at up to 30% the speed of light. Friction and magnetic fields heat it to millions of degrees.',
+    facts:['Inner edge sits at 3× the Schwarzschild radius — the ISCO','Turbulence driven by magnetorotational instability','Inner rings orbit once every few minutes'],
+    dur:10000 },
+  { r:7.2, done:false,
+    title:'DOPPLER BEAMING', tag:'RELATIVITY',
+    desc:'The approaching side of the disk is ~10× brighter. Plasma rushing toward you compresses its own light — shorter wavelength, higher energy.',
+    facts:['Brightness scales as (1+β)⁴ toward you','The receding side redshifts toward infrared','This asymmetry is direct observational proof of relativistic motion'],
+    dur:10000 },
+  { r:4.2, done:false,
+    title:'PHOTON SPHERE  r = 1.5rₛ', tag:'GEODESICS',
+    desc:'Here photons can orbit the black hole indefinitely. You are entering the region where light itself bends into closed loops.',
+    facts:['These orbits are unstable — any nudge escapes or falls in','The sharp shadow edge is defined by this sphere','Multiple stacked images of the disk exist inside this boundary'],
+    dur:10000 },
+  { r:2.6, done:false,
+    title:'GRAVITATIONAL TIME DILATION', tag:'GENERAL RELATIVITY',
+    desc:'Your clock has slowed dramatically. For every second you experience, years pass outside. The universe is aging without you.',
+    facts:['At r=1.5rₛ the dilation factor exceeds ×10','Kip Thorne calculated exactly this scenario for Interstellar','The outside universe appears blueshifted and accelerated'],
+    dur:10000 },
+  { r:1.55, done:false,
+    title:'EVENT HORIZON — IMMINENT', tag:'NO RETURN',
+    desc:'You are about to cross the boundary from which nothing escapes. From outside, you will appear frozen here forever, slowly redshifting to black.',
+    facts:['The horizon has no physical surface — you feel nothing crossing it','Your last radio signal will never reach the outside','Time and the radial direction exchange mathematical roles'],
+    dur:9000 },
+];
+
+function fmtTime(s){
+  const h=Math.floor(s/3600), m=Math.floor((s%3600)/60),
+        sec=Math.floor(s%60), cs=Math.floor((s%1)*100);
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}.${String(cs).padStart(2,'0')}`;
+}
+function fmtEarthTime(s){
+  if(s<60) return Math.floor(s)+'s';
+  if(s<3600){ const m=Math.floor(s/60); return m+'m '+Math.floor(s%60)+'s'; }
+  if(s<86400){ const h=Math.floor(s/3600),m=Math.floor((s%3600)/60); return h+'h '+m+'m'; }
+  if(s<604800){ const d=Math.floor(s/86400),h=Math.floor((s%86400)/3600); return d+'d '+h+'h'; }
+  if(s<2629800){ const w=Math.floor(s/604800),d=Math.floor((s%604800)/86400); return w+'wk '+d+'d'; }
+  const mo=Math.floor(s/2629800),wk=Math.floor((s%2629800)/604800);
+  if(mo<24) return mo+'mo'+(wk>0?' '+wk+'wk':'');
+  const yr=Math.floor(s/31557600),mos=Math.floor((s%31557600)/2629800);
+  return yr+'yr'+(mos>0?' '+mos+'mo':'');
+}
+
+function startFly(){
+  flyActive=true; flyT=0; properTime=0; coordTime=0; earthTime=0; flyPaused=false;
+  flyElapsed=0;
+  FLY_MILESTONES.forEach(m=>m.done=false);
+  flyStartR     = camera.position.length();
+  flyStartTheta = Math.atan2(camera.position.z, camera.position.x);
+  flyStartPhi   = Math.asin(camera.position.y / flyStartR);
+  controls.enabled=false;
+  document.getElementById('fly-hud').style.display='block';
+  document.getElementById('fly-btn').style.display='none';
+  document.getElementById('playback-controls').style.display='flex';
+  flyTimerEl.style.display='block';
+  flyTimerVal.textContent='00:00';
+  hideTooltip();
+}
+function stopFly(){
+  flyActive=false; flyT=0; insidePhase=false; insideT=0.0; horizonCrossed=false;
+  flySpeedMult=1; flyPaused=false;
+  insidePass.uniforms.insideT.value=0.0;
+  controls.enabled=true;
+  lensingPass.uniforms.strength.value=0.38;
+  camera.position.set(0,1.5,13); camera.lookAt(0,0,0);
+  document.getElementById('fly-hud').style.display='none';
+  document.getElementById('fly-btn').style.display='block';
+  document.getElementById('playback-controls').style.display='none';
+  document.getElementById('fly-hud-title').textContent='◈  APPROACH SEQUENCE ACTIVE';
+  document.getElementById('horizon-overlay').style.opacity='0';
+  document.getElementById('fly-credit').style.opacity='0';
+  fiEl.classList.remove('fi-centered');
+  clearInsideMsgs();
+  document.getElementById('pause-btn').classList.remove('active');
+  document.getElementById('pause-btn').textContent='⏸';
+  document.getElementById('fast-btn2').classList.remove('active');
+  document.getElementById('slow-btn').classList.remove('active');
+  document.getElementById('rewind-btn').classList.remove('active');
+  flyTimerEl.style.display='none';
+}
+
+document.getElementById('fly-btn').addEventListener('click',startFly);
+document.getElementById('abort-btn').addEventListener('click',stopFly);
+document.getElementById('pause-btn').addEventListener('click',()=>{
+  flyPaused=!flyPaused;
+  const btn=document.getElementById('pause-btn');
+  btn.textContent = flyPaused ? '▶' : '⏸';
+  btn.classList.toggle('active', flyPaused);
+});
+document.getElementById('fast-btn2').addEventListener('click',()=>{
+  const isActive = flySpeedMult===4;
+  flySpeedMult = isActive ? 1 : 4;
+  document.getElementById('fast-btn2').classList.toggle('active', !isActive);
+  document.getElementById('slow-btn').classList.remove('active');
+  document.getElementById('rewind-btn').classList.remove('active');
+  if(!isActive) flySpeedMult=4; else flySpeedMult=1;
+});
+document.getElementById('slow-btn').addEventListener('click',()=>{
+  const isActive = flySpeedMult===0.35;
+  flySpeedMult = isActive ? 1 : 0.35;
+  document.getElementById('slow-btn').classList.toggle('active', !isActive);
+  document.getElementById('fast-btn2').classList.remove('active');
+  document.getElementById('rewind-btn').classList.remove('active');
+});
+document.getElementById('rewind-btn').addEventListener('click',()=>{
+  if(insidePhase) return; // can't rewind inside horizon
+  const isActive = flySpeedMult===-2;
+  flySpeedMult = isActive ? 1 : -2;
+  document.getElementById('rewind-btn').classList.toggle('active', !isActive);
+  document.getElementById('fast-btn2').classList.remove('active');
+  document.getElementById('slow-btn').classList.remove('active');
+});
+
+function flyInCamPos(t){
+  // Ease: steady spiral inward, short sharp plunge at the very end.
+  // Old function spent 72% of time in the outer 32% of distance — panels all
+  // clustered in the last 10 seconds. New function distributes evenly.
+  const ease = t < 0.88
+    ? Math.pow(t / 0.88, 0.82) * 0.92
+    : 0.92 + Math.pow((t - 0.88) / 0.12, 2.2) * 0.08;
+
+  const r   = THREE.MathUtils.lerp(flyStartR, BH_R*1.01, ease);
+  const phi = flyStartPhi * Math.max(0.28, 1-t*0.72);
+  const th  = flyStartTheta + t*Math.PI*4.5;                 // 2.25 orbits
+
+  return new THREE.Vector3(
+    r*Math.cos(th)*Math.cos(phi),
+    r*Math.sin(phi),
+    r*Math.sin(th)*Math.cos(phi)
+  );
+}
+
+// ═══════════════════════════════════════════════
+// AUDIO
+// ═══════════════════════════════════════════════
+let audioCtx=null, masterGain=null, audioReady=false, audioMuted=true;
+let oscNodes=[], noiseGainNode=null;
+
+function initAudio(){
+  if(audioReady)return;
+  try{
+    const AC=window.AudioContext||window.webkitAudioContext;
+    audioCtx=new AC();
+    if(audioCtx.state==='suspended')audioCtx.resume();
+
+    masterGain=audioCtx.createGain();
+    masterGain.gain.value=0;
+    masterGain.connect(audioCtx.destination);
+
+    // Deep harmonic drone
+    const freqs=[27.5,55,82.4,110,36.7], gains=[0.5,0.25,0.15,0.07,0.28];
+    freqs.forEach((f,i)=>{
+      const osc=audioCtx.createOscillator(); osc.type='sine'; osc.frequency.value=f;
+      const g=audioCtx.createGain(); g.gain.value=gains[i];
+      osc.connect(g); g.connect(masterGain); osc.start();
+      oscNodes.push(osc);
+    });
+
+    // Slow LFO for organic swell
+    const lfo=audioCtx.createOscillator(); lfo.frequency.value=0.09;
+    const lg=audioCtx.createGain(); lg.gain.value=0.025;
+    lfo.connect(lg); lg.connect(masterGain.gain); lfo.start();
+
+    // Low-pass noise (turbulence rumble)
+    const bufLen=audioCtx.sampleRate*3;
+    const buf=audioCtx.createBuffer(1,bufLen,audioCtx.sampleRate);
+    const nd=buf.getChannelData(0);
+    for(let i=0;i<bufLen;i++) nd[i]=Math.random()*2-1;
+    const ns=audioCtx.createBufferSource(); ns.buffer=buf; ns.loop=true;
+    const lpf=audioCtx.createBiquadFilter(); lpf.type='lowpass'; lpf.frequency.value=90; lpf.Q.value=1.5;
+    noiseGainNode=audioCtx.createGain(); noiseGainNode.gain.value=0.02;
+    ns.connect(lpf); lpf.connect(noiseGainNode); noiseGainNode.connect(masterGain);
+    ns.start();
+
+    audioReady=true;
+  } catch(e){ console.warn('Audio init failed',e); }
+}
+
+function updateAudio(camDist, isFlyIn){
+  if(!audioReady||!audioCtx||audioMuted)return;
+  const prox=Math.max(0,Math.min(1,1-(camDist-BH_R*1.5)/14));
+  const proxSq=prox*prox; // exponential feel
+
+  // Volume: quiet at distance, surges near horizon, swells inside
+  const tVol = insidePhase ? 0.55 : (isFlyIn ? 0.04+proxSq*0.65 : 0.03+prox*0.14);
+  masterGain.gain.setTargetAtTime(tVol, audioCtx.currentTime, insidePhase ? 1.8 : 0.5);
+
+  // Gravitational redshift: pitch drops steeply near horizon.
+  // Real redshift diverges to zero AT the horizon — we model the audible portion.
+  // At prox=0.8 (near ISCO) pitch is already halved; near horizon it bottoms out.
+  const pf=Math.max(0.28, 1.0-prox*0.72);
+  const base=[27.5,55,82.4,110,36.7];
+  oscNodes.forEach((o,i)=>o.frequency.setTargetAtTime(base[i]*pf,audioCtx.currentTime,0.9));
+
+  // Turbulent noise: roars as plasma swirls faster near the ISCO
+  if(noiseGainNode) noiseGainNode.gain.setTargetAtTime(0.008+proxSq*0.22,audioCtx.currentTime,0.6);
+}
+
+const soundBtn=document.getElementById('sound-btn');
+soundBtn.addEventListener('click',()=>{
+  if(!audioReady){ initAudio(); audioMuted=false; soundBtn.textContent='🔊'; masterGain&&(masterGain.gain.value=0.1); return; }
+  audioMuted=!audioMuted;
+  soundBtn.textContent=audioMuted?'🔇':'🔊';
+  if(audioMuted) masterGain.gain.setTargetAtTime(0,audioCtx.currentTime,0.3);
+  else           masterGain.gain.setTargetAtTime(0.1,audioCtx.currentTime,0.5);
+});
+// Auto-init audio on first interaction, but keep muted until user clicks sound btn
+document.addEventListener('pointerdown',()=>{ if(!audioReady)initAudio(); },{once:true});
+
+// ═══════════════════════════════════════════════
+// RESIZE
+// ═══════════════════════════════════════════════
+window.addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+  composer.setSize(innerWidth,innerHeight);
+  bloomPass.resolution.set(innerWidth,innerHeight);
+  lensingPass.uniforms.aspect.value=innerWidth/innerHeight;
+  insidePass.uniforms.aspect.value=innerWidth/innerHeight;
+});
+
+// ═══════════════════════════════════════════════
+// HINT FADE
+// ═══════════════════════════════════════════════
+setTimeout(()=>{ document.getElementById('hint').style.opacity='0'; },5000);
+
+// ═══════════════════════════════════════════════
+// ANIMATION LOOP
+// ═══════════════════════════════════════════════
+const clock   = new THREE.Clock();
+let horizonCrossed = false;
+
+function animate(){
+  requestAnimationFrame(animate);
+  const dt=clock.getDelta(), t=clock.elapsedTime;
+
+  // Shared disk time
+  uTime.value = t;
+
+  // Glow cam direction
+  glowMesh.material.uniforms.camPos.value.copy(camera.position);
+
+  // ── Elapsed timer update ──
+  if(!flyPaused && (flyActive || insidePhase)){
+    flyElapsed = Math.max(0, flyElapsed + dt);
+    const m=Math.floor(flyElapsed/60), s=Math.floor(flyElapsed%60);
+    flyTimerVal.textContent=(m<10?'0':'')+m+':'+(s<10?'0':'')+s;
+  }
+
+  // ── Fly-in update ──
+  if(flyActive && !flyPaused){
+    const prev=flyT;
+    flyT = Math.max(0, Math.min(flyT + dt*0.009*flySpeedMult, 1.0)); // ~111 second journey
+
+    // Rewinding: reset milestones that are now ahead of us again
+    if(flySpeedMult<0){
+      const pos=flyInCamPos(flyT);
+      const r=pos.length();
+      FLY_MILESTONES.forEach(m=>{ if(r>m.r) m.done=false; });
+      hideFlyInfo();
+      // Stop rewind at the beginning
+      if(flyT<=0){
+        flySpeedMult=1;
+        document.getElementById('rewind-btn').classList.remove('active');
+      }
+    }
+
+    const pos = flyInCamPos(flyT);
+    camera.position.copy(pos);
+    camera.lookAt(0,0,0);
+
+    const r=pos.length();
+    const dilation=Math.sqrt(Math.max(1e-4, 1-(BH_R*0.85)/r));
+    properTime += dt;
+    coordTime  += dt/dilation;
+    // Earth time: ~1 hr/s far out, climbs to months/s near horizon
+    const earthRate = 3600 * Math.pow(flyStartR / Math.max(r, BH_R*1.02), 3);
+    earthTime += dt * earthRate;
+
+    document.getElementById('hud-proper').textContent  = fmtTime(properTime);
+    document.getElementById('hud-coord').textContent   = fmtTime(coordTime);
+    document.getElementById('hud-dilation').textContent= '×'+Math.min(9999,(1/dilation)).toFixed(dilation>0.5?2:0);
+    document.getElementById('hud-dist').textContent    = ((r-BH_R)*150).toFixed(1)+'M km';
+    document.getElementById('hud-earth').textContent   = fmtEarthTime(earthTime);
+
+    // Strengthen lensing as we approach
+    const prox=Math.max(0,1-(r-BH_R)/6);
+    lensingPass.uniforms.strength.value=0.28+prox*0.55;
+
+    // ── Approach milestone info panels ──
+    FLY_MILESTONES.forEach(m=>{
+      if(!m.done && r<m.r){ m.done=true; showFlyInfo(m.title,m.tag,m.desc,m.facts,m.dur); }
+    });
+
+    // Event horizon crossing → begin inside sequence
+    if(r<BH_R*1.04 && !horizonCrossed){
+      horizonCrossed=true;
+      flyActive=false;
+      insidePhase=true; insideT=0.01; // start above smoothstep threshold — disk hidden from frame 1
+      document.getElementById('fly-hud-title').textContent='◈  BEYOND THE EVENT HORIZON';
+
+      const ov=document.getElementById('horizon-overlay');
+      ov.style.opacity='0.85';
+      setTimeout(()=>{ ov.style.opacity='0'; },400);
+
+      // Center the panel and begin story — ~83 second inside sequence
+      fiEl.classList.add('fi-centered');
+      insideMsgTimers.push(setTimeout(()=>showFlyInfo(
+        'HORIZON — CROSSED','EQUIVALENCE PRINCIPLE',
+        'You crossed it without knowing. No wall, no alarm, no pain. The horizon is not a place — it is the moment physics drew a line around you, and you didn\'t feel it being drawn.',
+        ['From outside, your ship appears to slow, redden, and freeze at the boundary — you will never be seen to cross it',
+         'The equivalence principle forbids any local warning: free fall feels identical to floating in empty space'],
+        22000,0),6000));
+      insideMsgTimers.push(setTimeout(()=>showFlyInfo(
+        'YOUR FAMILY — UNREACHABLE','CAUSALITY',
+        'They are still out there, watching your ship slow and redden — not yet knowing you already crossed. You could write a message right now. You could scream. Nothing you send will ever reach them.',
+        ['Your future light cone is entirely inside the horizon — causality itself prevents any signal from escaping',
+         'The last photon from Earth arrived alongside you. You are already reading the final letter you will ever receive.'],
+        22000,0),32000));
+      insideMsgTimers.push(setTimeout(()=>showFlyInfo(
+        'TIME — THE HONEST ANSWER','DILATION & SIMULTANEITY',
+        'Near the horizon, years burned on Earth for every second of yours. Your family aged while you fell. By the time you crossed, decades may have passed for them. But inside, physics cannot tell you what time it is on Earth right now — that question has no answer.',
+        ['The dilation on approach was real — it was set by how close your orbit came to the horizon',
+         'Inside, "now" on Earth and "now" here cannot be compared. They are causally disconnected. The clock stopped meaning anything.'],
+        22000,0),58000));
+      insideMsgTimers.push(setTimeout(()=>showFlyInfo(
+        'THE RING ABOVE YOU','RELATIVISTIC BEAMING',
+        'That shrinking circle is everything — every star, every galaxy, every face you have ever loved — compressed by gravity and velocity into one point of light above you. It is getting smaller. When it closes, you will never receive another photon from home.',
+        ['Relativistic beaming is real — any observer falling into a black hole sees the outside universe collapse to a shrinking ring',
+         'The ring blueshifts as it shrinks: outside, time is accelerating. Stars are being born and dying in that circle.'],
+        22000,0),84000));
+      insideMsgTimers.push(setTimeout(()=>showFlyInfo(
+        'THE SINGULARITY — YOUR TOMORROW','THE INEVITABLE',
+        'You cannot turn away from it — not from fear, but because of physics. Inside the horizon, the direction toward the singularity has become time itself. You are not moving toward it. You are aging toward it.',
+        ['GR predicts infinite curvature at r=0 — its own equations break down and stop making predictions there',
+         'The singularity is a spacelike surface: it is simultaneously in every direction of your future at once'],
+        22000,0),110000));
+      insideMsgTimers.push(setTimeout(()=>showFlyInfo(
+        'FINAL TRANSMISSION','UNKNOWN',
+        'No one will ever know what you found here. Hawking radiation will slowly evaporate this black hole from the outside — but it carries no memory of you. What you experience now is beyond the reach of any theory, any instrument, any other mind. It belongs only to you.',
+        ['The black hole information paradox — whether you are truly erased — is unresolved. Hawking, Penrose, and Susskind spent careers on it.',
+         'To the universe you came from, you ceased to exist at the horizon. What lies beyond is the last thing science cannot touch.'],
+        32000,0),136000));
+      // Credit — fades in after final panel closes
+      insideMsgTimers.push(setTimeout(()=>{
+        const cr=document.getElementById('fly-credit');
+        cr.style.opacity='1';
+        setTimeout(()=>{ cr.style.opacity='0'; },6000);
+      }, 169000));
+      // Story complete — reset after final panel closes
+      insideMsgTimers.push(setTimeout(()=>{ insidePhase=false; insidePass.uniforms.insideT.value=0.0; setTimeout(stopFly,2000); }, 176000));
+    }
+  }
+
+  // ── Inside-horizon sequence ──
+  if(insidePhase){
+    if(!flyPaused){
+      insideT = Math.min(insideT + dt*0.006*flySpeedMult, 0.97); // cap below full-black singularity
+      camera.position.multiplyScalar(0.9998);
+      camera.lookAt(0,0,0);
+      properTime += dt;
+    }
+    insidePass.uniforms.insideT.value = insideT;
+
+    document.getElementById('hud-proper').textContent  = fmtTime(properTime);
+    document.getElementById('hud-coord').textContent   = 'UNDEFINED';
+    document.getElementById('hud-dilation').textContent= '∞';
+    document.getElementById('hud-dist').textContent    = 'PAST HORIZON';
+    document.getElementById('hud-earth').textContent   = 'UNDEFINED';
+
+    // Visual caps at 1.0 — stopFly is driven by the story timer, not insideT
+  }
+
+  // ── Lensing screen position ──
+  bhMesh.getWorldPosition(_bhWorld);
+  camera.getWorldDirection(_camDir);
+  const isBehind=_bhWorld.clone().sub(camera.position).dot(_camDir)<0;
+  lensingPass.uniforms.behind.value=isBehind?1.0:0.0;
+  if(!isBehind){
+    _ndc.copy(_bhWorld).project(camera);
+    lensingPass.uniforms.bhUV.value.set((_ndc.x+1)*0.5,(_ndc.y+1)*0.5);
+    const dist=camera.position.distanceTo(_bhWorld);
+    const hfov=camera.fov*0.5*(Math.PI/180);
+    lensingPass.uniforms.bhScreenR.value=Math.atan(BH_R/dist)/hfov*0.5*2.2;
+  }
+
+  // ── Back-of-disk arc brightness by camera elevation ──
+  const camLen = camera.position.length();
+  const elevFrac = camLen > 0.001
+    ? Math.asin(Math.max(-1, Math.min(1, camera.position.y / camLen))) / (Math.PI/2)
+    : 0;
+  topArcMesh.material.uniforms.alphaScale.value = THREE.MathUtils.clamp(0.55 + elevFrac*0.30, 0.15, 0.85);
+  botArcMesh.material.uniforms.alphaScale.value = THREE.MathUtils.clamp(0.55 - elevFrac*0.30, 0.15, 0.85);
+
+  // ── Audio modulation ──
+  updateAudio(camLen, flyActive);
+
+  // ── Render ──
+  if(dreamActive && dreamScene && dreamCamera && dreamControls){
+    const dt2=Date.now()*0.001;
+    if(dreamLayers[0]){ dreamLayers[0].rotation.y= dt2*0.010; }
+    if(dreamLayers[1]){ dreamLayers[1].rotation.y=-dt2*0.007; dreamLayers[1].rotation.x=dt2*0.003; }
+    if(dreamLayers[2]){ dreamLayers[2].rotation.y= dt2*0.017; dreamLayers[2].rotation.z=-dt2*0.005; }
+
+    // Inner glow pulse
+    if(dreamLayers[2]){
+      const pulse=0.11 + Math.sin(dt2*0.42)*0.028 + Math.sin(dt2*0.17)*0.014;
+      dreamLayers[2].children.forEach(m=>{ if(m.material) m.material.opacity=pulse; });
+    }
+
+    // Tick shooting stars — fade out and remove finished ones
+    for(let i=dreamShooters.length-1;i>=0;i--){
+      const s=dreamShooters[i];
+      s.life-=dt;
+      const fade=Math.max(0,s.life/s.maxLife);
+      s.line.material.opacity=fade*0.9;
+      s.line.position.addScaledVector(s.vel,dt*60);
+      if(s.life<=0){ dreamScene.remove(s.line); s.line.geometry.dispose(); s.line.material.dispose(); dreamShooters.splice(i,1); }
+    }
+
+    dreamControls.update();
+    renderer.autoClear=true;
+    renderer.render(dreamScene,dreamCamera);
+    renderer.autoClear=false;
+  } else {
+    if(!flyActive) controls.update();
+    renderer.autoClear=false;
+    composer.render();
+  }
+}
+
+// ═══════════════════════════════════════════════
+// DREAMING MODE — uses main renderer/canvas
+// ═══════════════════════════════════════════════
+let dreamActive=false, dreamScene=null, dreamCamera=null;
+let dreamControls=null;
+let dreamNoiseNode=null, dreamGainNode=null;
+let dreamLayers=[];
+let dreamShooters=[], dreamShootTimer=null;
+
+// Soft circular sprite — prevents square pixel artefacts on PointsMaterial
+function _makeDreamSprite(feather){
+  const c=document.createElement('canvas'); c.width=64; c.height=64;
+  const x=c.getContext('2d');
+  const g=x.createRadialGradient(32,32,0,32,32,32);
+  g.addColorStop(0,           'rgba(255,255,255,1.0)');
+  g.addColorStop(feather,     'rgba(255,255,255,0.6)');
+  g.addColorStop(1,           'rgba(255,255,255,0.0)');
+  x.fillStyle=g; x.fillRect(0,0,64,64);
+  return new THREE.CanvasTexture(c);
+}
+const _dreamCloudSprite = _makeDreamSprite(0.25); // very soft, for clouds
+const _dreamStarSprite  = _makeDreamSprite(0.08); // tight, for stars
+
+// Build a particle cloud with Gaussian-ish distribution on three axes
+function _mkCloud(n, rx, ry, rz, cols, sz, op, additive){
+  const p=new Float32Array(n*3), c=new Float32Array(n*3);
+  for(let i=0;i<n;i++){
+    const u=()=>Math.sqrt(-2*Math.log(Math.random()+1e-9))*Math.cos(2*Math.PI*Math.random());
+    p[i*3]=u()*rx; p[i*3+1]=u()*ry; p[i*3+2]=u()*rz;
+    const col=cols[Math.floor(Math.random()*cols.length)];
+    const br=0.55+Math.random()*0.45;
+    c[i*3]=col[0]*br; c[i*3+1]=col[1]*br; c[i*3+2]=col[2]*br;
+  }
+  const g=new THREE.BufferGeometry();
+  g.setAttribute('position',new THREE.BufferAttribute(p,3));
+  g.setAttribute('color',new THREE.BufferAttribute(c,3));
+  const isStar = sz < 1.8;
+  return new THREE.Points(g,new THREE.PointsMaterial({
+    size:sz, map: isStar ? _dreamStarSprite : _dreamCloudSprite,
+    vertexColors:true, sizeAttenuation:true,
+    transparent:true, opacity:op, depthWrite:false,
+    alphaTest:0.01,
+    blending:additive?THREE.AdditiveBlending:THREE.NormalBlending
+  }));
+}
+
+function startDreaming(){
+  if(dreamActive) return;
+  dreamActive=true;
+  controls.enabled=false;
+  dreamLayers=[];
+  document.getElementById('fly-btn').style.display='none';
+
+  dreamScene=new THREE.Scene();
+  dreamScene.background=new THREE.Color(0x04000d);
+  dreamCamera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,0.1,8000);
+  dreamCamera.position.set(0,30,130);
+
+  dreamControls=new OrbitControls(dreamCamera,renderer.domElement);
+  dreamControls.enableDamping=true;
+  dreamControls.autoRotate=true;
+  dreamControls.autoRotateSpeed=0.10;
+  dreamControls.minDistance=40;
+  dreamControls.maxDistance=500;
+  dreamControls.dampingFactor=0.05;
+
+  // ── Realistic star field — three tiers of magnitude ──
+  function _starPos(rMin, rMax, bandStrength){
+    // Slight galactic band: compress y toward the plane stochastically
+    const r=rMin+Math.random()*(rMax-rMin);
+    const th=Math.random()*Math.PI*2;
+    const ph=Math.acos(2*Math.random()-1);
+    let x=r*Math.sin(ph)*Math.cos(th), y=r*Math.sin(ph)*Math.sin(th), z=r*Math.cos(ph);
+    // Pull ~40% of stars toward the galactic equator (y≈0 plane)
+    if(Math.random()<bandStrength) y*=0.18+Math.random()*0.22;
+    return [x,y,z];
+  }
+  function _starCol(tc){
+    // Hertzsprung-Russell inspired distribution near a hot young nebula
+    if(tc<0.38)  return [0.82,0.88,1.00]; // O/B blue-white
+    if(tc<0.60)  return [0.96,0.96,1.00]; // A white
+    if(tc<0.74)  return [1.00,0.97,0.88]; // F yellow-white
+    if(tc<0.85)  return [1.00,0.88,0.66]; // G/K yellow-orange
+    if(tc<0.93)  return [1.00,0.60,0.38]; // K/M orange-red
+    return              [0.92,0.72,1.00]; // nebula-lit lavender outlier
+  }
+  // Tier 1: vast field of faint distant stars
+  { const n=28000, p=new Float32Array(n*3), c=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ const [x,y,z]=_starPos(600,3200,0.40); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()); const br=0.25+Math.random()*0.45; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('color',new THREE.BufferAttribute(c,3));
+    dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:0.55,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.70,depthWrite:false,alphaTest:0.01}))); }
+  // Tier 2: mid-field stars, brighter and more varied
+  { const n=5500, p=new Float32Array(n*3), c=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ const [x,y,z]=_starPos(250,1200,0.30); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()); const br=0.55+Math.random()*0.45; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('color',new THREE.BufferAttribute(c,3));
+    dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:1.05,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.88,depthWrite:false,alphaTest:0.01}))); }
+  // Tier 3: handful of nearby bright foreground stars
+  { const n=320, p=new Float32Array(n*3), c=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ const [x,y,z]=_starPos(100,500,0.20); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()*0.6); const br=0.80+Math.random()*0.20; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('color',new THREE.BufferAttribute(c,3));
+    dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:2.1,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.95,depthWrite:false,alphaTest:0.01,blending:THREE.AdditiveBlending}))); }
+
+  // ── Layer 0: Outer haze — deep purple/violet, large, very transparent ──
+  const p0=new THREE.Object3D(); dreamScene.add(p0); dreamLayers.push(p0);
+  p0.add(_mkCloud(8000,110,70,95,
+    [[0.28,0.06,0.82],[0.18,0.04,0.68],[0.42,0.08,0.88],[0.22,0.10,0.72]],
+    6.0, 0.055, true));
+
+  // ── Layer 1: Main body — pink-purple / magenta ──
+  const p1=new THREE.Object3D(); dreamScene.add(p1); dreamLayers.push(p1);
+  p1.add(_mkCloud(7000,75,48,65,
+    [[0.88,0.18,0.78],[0.72,0.12,0.90],[0.95,0.30,0.82],[0.60,0.08,0.88]],
+    4.2, 0.075, true));
+
+  // ── Layer 2: Inner glow — bright pink-white core ──
+  const p2=new THREE.Object3D(); dreamScene.add(p2); dreamLayers.push(p2);
+  p2.add(_mkCloud(4500,40,26,36,
+    [[1.00,0.60,0.95],[0.98,0.45,0.88],[0.95,0.80,1.00],[1.00,0.70,0.90]],
+    3.0, 0.11, true));
+
+  // ── Star clusters inside nebula (bright, normal blending) ──
+  dreamScene.add(_mkCloud(3000,130,80,110,
+    [[1.0,1.0,1.0],[0.90,0.92,1.0],[1.0,0.85,0.95],[0.82,0.78,1.0]],
+    1.1, 0.92, false));
+
+  // ── Bright hero stars (additive glow) ──
+  dreamScene.add(_mkCloud(500,160,90,140,
+    [[1.0,1.0,1.0],[1.0,0.80,0.96],[0.85,0.80,1.0]],
+    2.4, 0.90, true));
+
+  // Shooting stars
+  function _spawnShooter(){
+    if(!dreamActive) return;
+    // Random origin far from centre, aimed roughly inward with a drift
+    const ox=(Math.random()-0.5)*400, oy=(Math.random()-0.5)*200, oz=(Math.random()-0.5)*400;
+    const len=18+Math.random()*28;
+    const dir=new THREE.Vector3(-ox,-oy,-oz).normalize();
+    const tail=new THREE.Vector3(ox,oy,oz);
+    const head=tail.clone().addScaledVector(dir,len);
+    const geo=new THREE.BufferGeometry().setFromPoints([tail,head]);
+    const colors=[0xffffff,0xddccff,0xffccee,0xaabbff];
+    const col=colors[Math.floor(Math.random()*colors.length)];
+    const mat=new THREE.LineBasicMaterial({color:col,transparent:true,opacity:0.9});
+    const line=new THREE.Line(geo,mat);
+    dreamScene.add(line);
+    const maxLife=0.55+Math.random()*0.45;
+    dreamShooters.push({ line, vel:dir.clone().multiplyScalar(0.8+Math.random()*0.6), life:maxLife, maxLife });
+    // Next shooter: 4–9 seconds
+    dreamShootTimer=setTimeout(_spawnShooter, 4000+Math.random()*5000);
+  }
+  dreamShootTimer=setTimeout(_spawnShooter, 2000+Math.random()*3000);
+
+  // Audio
+  _startDreamNoise();
+
+  // Show UI overlay
+  const overlay=document.getElementById('dream-overlay');
+  overlay.style.display='block';
+  requestAnimationFrame(()=>requestAnimationFrame(()=>overlay.classList.add('visible')));
+}
+
+function _startDreamNoise(){
+  if(!audioCtx||audioMuted) return;
+  const sr=audioCtx.sampleRate;
+  const buf=audioCtx.createBuffer(1,sr*2,sr);
+  const data=buf.getChannelData(0);
+  for(let i=0;i<data.length;i++) data[i]=(Math.random()*2-1);
+  dreamNoiseNode=audioCtx.createBufferSource();
+  dreamNoiseNode.buffer=buf; dreamNoiseNode.loop=true;
+  const f1=audioCtx.createBiquadFilter(); f1.type='lowpass'; f1.frequency.value=620; f1.Q.value=0.4;
+  const f2=audioCtx.createBiquadFilter(); f2.type='lowpass'; f2.frequency.value=380; f2.Q.value=0.3;
+  dreamGainNode=audioCtx.createGain();
+  dreamGainNode.gain.setValueAtTime(0,audioCtx.currentTime);
+  dreamGainNode.gain.linearRampToValueAtTime(0.07,audioCtx.currentTime+2.5);
+  dreamNoiseNode.connect(f1); f1.connect(f2); f2.connect(dreamGainNode); dreamGainNode.connect(audioCtx.destination);
+  dreamNoiseNode.start();
+}
+
+function stopDreaming(){
+  if(!dreamActive) return;
+  dreamActive=false;
+  clearTimeout(dreamShootTimer); dreamShootTimer=null; dreamShooters=[];
+  controls.enabled=!flyActive;
+  if(!flyActive) document.getElementById('fly-btn').style.display='block';
+  if(dreamControls){ dreamControls.dispose(); dreamControls=null; }
+  if(dreamGainNode){
+    try{ dreamGainNode.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.8); }catch(e){}
+    setTimeout(()=>{ try{ dreamNoiseNode&&dreamNoiseNode.stop(); }catch(e){} dreamNoiseNode=null; dreamGainNode=null; },900);
+  }
+  const overlay=document.getElementById('dream-overlay');
+  overlay.classList.remove('visible');
+  setTimeout(()=>{
+    overlay.style.display='none';
+    if(dreamScene){
+      dreamScene.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); });
+      dreamScene=null;
+    }
+    dreamCamera=null; dreamLayers=[];
+  },650);
+}
+
+document.getElementById('dream-btn').addEventListener('click',()=>{
+  if(dreamActive) stopDreaming(); else startDreaming();
+});
+document.getElementById('dream-exit').addEventListener('click',stopDreaming);
+
+animate();
+</script>
+</body>
+</html>
