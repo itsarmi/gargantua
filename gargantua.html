@@ -213,10 +213,23 @@ canvas { display:block; touch-action:none; }
 
 /* ── Mobile / touch ── */
 @media (max-width:600px),(pointer:coarse){
-  #tooltip { width:min(312px,calc(100vw - 24px)); }
-  #fly-info { width:calc(100vw - 40px); }
-  #fly-hud  { min-width:0; width:calc(100vw - 40px); padding:10px 14px 12px; }
-  .hud-row  { gap:12px; }
+  #tooltip {
+    width:min(260px,calc(100vw - 32px));
+    font-size:10px; line-height:1.55;
+    padding:10px 12px 12px;
+  }
+  .tt-title { font-size:10px; }
+  .tt-desc  { min-height:2.8em; margin-bottom:7px; }
+
+  #fly-info {
+    left:12px; right:12px; width:auto;
+    font-size:10.5px; line-height:1.55;
+    padding:10px 12px 12px;
+  }
+  #fly-hud  { min-width:0; width:calc(100vw - 40px); padding:10px 14px 12px; font-size:10.5px; }
+  .hud-row  { gap:8px; }
+  .hud-row span:first-child { font-size:9px; }
+
   #sound-btn, #dream-btn { width:44px; height:44px; font-size:17px; }
   #playback-controls button { width:44px; height:44px; font-size:15px; }
   #playback-controls { right:72px; }
