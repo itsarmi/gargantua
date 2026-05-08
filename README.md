@@ -2,7 +2,7 @@
 
 An interactive black hole simulation inspired by *Interstellar* — built as a single, self-contained HTML file. No installation, no server, no dependencies. Just open it in a browser.
 
-![Gargantua simulation](screenshot.png)
+
 
 ---
 
@@ -54,18 +54,6 @@ A real-time WebGL simulation of Gargantua, the supermassive black hole from *Int
 - Soft two-tone blip on each inside panel
 - Music swells when you cross
 
----
-
-## How to run
-
-```
-git clone https://github.com/itsarmi/gargantua.git
-open gargantua.html
-```
-
-Or just download `gargantua.html` and open it. That's it.
-
-Works in any modern browser (Chrome, Firefox, Safari, Edge). Requires an internet connection on first load to fetch Three.js from the CDN — after that it can run offline if cached.
 
 ---
 
@@ -97,4 +85,4 @@ The story panels inside the horizon are written to be scientifically honest, inc
 
 Created by **Armi** — Friday 08. of May 2026
 
-Built with Claude (Anthropic).
+Built together with Claude (Anthropic).
