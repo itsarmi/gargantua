@@ -210,11 +210,29 @@ canvas { display:block; touch-action:none; }
   font-family:'SF Mono','Menlo',monospace;
   font-size:10px; letter-spacing:0.30em; color:rgba(255,210,160,0.55);
 }
+
+/* ── Mobile / touch ── */
+@media (max-width:600px),(pointer:coarse){
+  #tooltip { width:min(312px,calc(100vw - 24px)); }
+  #fly-info { width:calc(100vw - 40px); }
+  #fly-hud  { min-width:0; width:calc(100vw - 40px); padding:10px 14px 12px; }
+  .hud-row  { gap:12px; }
+  #sound-btn, #dream-btn { width:44px; height:44px; font-size:17px; }
+  #playback-controls button { width:44px; height:44px; font-size:15px; }
+  #playback-controls { right:72px; }
+  #dream-btn { bottom:72px; }
+  #fly-timer { bottom:72px; }
+  #abort-btn, #speed-btn { padding:9px 0; font-size:11px; }
+}
 </style>
 </head>
 <body>
 
-<div id="hint">Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Hover to explore</div>
+<div id="hint"></div>
+<script>document.getElementById('hint').innerHTML=('ontouchstart' in window||navigator.maxTouchPoints>0)
+  ?'Drag to orbit &nbsp;·&nbsp; Pinch to zoom &nbsp;·&nbsp; Tap to explore'
+  :'Drag to orbit &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Hover to explore';
+</script>
 
 <div id="tooltip">
   <div class="tt-header">
