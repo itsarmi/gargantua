@@ -170,6 +170,27 @@ canvas { display:block; touch-action:none; }
 }
 #dream-btn:hover { border-color:rgba(180,140,255,0.9); color:#d8c0ff; }
 
+/* ── Fullscreen button ── */
+#fullscreen-btn {
+  position:fixed; bottom:104px; right:20px; z-index:200;
+  background:rgba(0,0,0,0.55); border:1px solid rgba(210,110,10,0.35);
+  border-radius:4px; color:rgba(255,255,255,0.55); font-size:13px;
+  width:34px; height:34px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; transition:border-color 0.2s;
+  letter-spacing:0;
+}
+#fullscreen-btn:hover { border-color:rgba(255,155,20,0.7); }
+
+/* ── Hide UI button ── */
+#hide-btn {
+  position:fixed; bottom:146px; right:20px; z-index:200;
+  background:rgba(0,0,0,0.55); border:1px solid rgba(210,110,10,0.35);
+  border-radius:4px; color:rgba(255,255,255,0.45); font-size:13px;
+  width:34px; height:34px; cursor:pointer; display:flex;
+  align-items:center; justify-content:center; transition:border-color 0.2s, opacity 0.35s;
+}
+#hide-btn:hover { border-color:rgba(255,155,20,0.7); }
+
 /* ── Dreaming overlay ── */
 #dream-overlay {
   position:fixed; inset:0; z-index:1000; display:none;
@@ -230,11 +251,13 @@ canvas { display:block; touch-action:none; }
   .hud-row  { gap:8px; }
   .hud-row span:first-child { font-size:9px; }
 
-  #sound-btn, #dream-btn { width:44px; height:44px; font-size:17px; }
+  #sound-btn, #dream-btn, #fullscreen-btn, #hide-btn { width:44px; height:44px; font-size:15px; }
   #playback-controls button { width:44px; height:44px; font-size:15px; }
   #playback-controls { right:72px; }
   #dream-btn { bottom:72px; }
   #fly-timer { bottom:72px; }
+  #fullscreen-btn { bottom:124px; }
+  #hide-btn { bottom:176px; }
   #abort-btn, #speed-btn { padding:9px 0; font-size:11px; }
 }
 </style>
@@ -277,8 +300,10 @@ canvas { display:block; touch-action:none; }
   <button id="pause-btn"  title="Pause / Resume">⏸</button>
   <button id="fast-btn2"  title="Fast forward (4×)">⏩</button>
 </div>
-<button id="dream-btn" title="Dreaming mode">🌌</button>
-<button id="sound-btn" title="Toggle audio">🔇</button>
+<button id="hide-btn"       title="Hide / show controls">⊙</button>
+<button id="fullscreen-btn" title="Toggle fullscreen">⤢</button>
+<button id="dream-btn"      title="Dreaming mode">🌌</button>
+<button id="sound-btn"      title="Toggle audio">🔇</button>
 
 <div id="dream-overlay">
   <button id="dream-exit">EXIT</button>
@@ -828,6 +853,18 @@ document.addEventListener('mousemove',e=>{
   }
 });
 document.addEventListener('mouseleave',hideTooltip);
+
+// Parallax source — mouse on desktop, device tilt on mobile
+document.addEventListener('mousemove',e=>{
+  dreamMouse.x=(e.clientX/innerWidth-0.5)*2;
+  dreamMouse.y=-(e.clientY/innerHeight-0.5)*2;
+});
+if(window.DeviceOrientationEvent){
+  window.addEventListener('deviceorientation',e=>{
+    dreamMouse.x=Math.max(-1,Math.min(1,(e.gamma||0)/22));
+    dreamMouse.y=Math.max(-1,Math.min(1,((e.beta||0)-45)/35));
+  },{passive:true});
+}
 
 let touchOrigin=null,touchHideTimer=null;
 renderer.domElement.addEventListener('touchstart',e=>{
@@ -1392,12 +1429,37 @@ function animate(){
     if(dreamLayers[0]){ dreamLayers[0].rotation.y= dt2*0.010; }
     if(dreamLayers[1]){ dreamLayers[1].rotation.y=-dt2*0.007; dreamLayers[1].rotation.x=dt2*0.003; }
     if(dreamLayers[2]){ dreamLayers[2].rotation.y= dt2*0.017; dreamLayers[2].rotation.z=-dt2*0.005; }
+    if(dreamNebulaB){ dreamNebulaB.rotation.y=dt2*0.006; dreamNebulaB.rotation.z=dt2*0.002; }
+    if(dreamNebulaC){ dreamNebulaC.rotation.y=-dt2*0.005; dreamNebulaC.rotation.x=dt2*0.003; }
 
     // Inner glow pulse
     if(dreamLayers[2]){
       const pulse=0.11 + Math.sin(dt2*0.42)*0.028 + Math.sin(dt2*0.17)*0.014;
       dreamLayers[2].children.forEach(m=>{ if(m.material) m.material.opacity=pulse; });
     }
+
+    // Scene breathing — very slow exposure oscillation
+    renderer.toneMappingExposure=0.85+Math.sin(dt2*0.078)*0.055+Math.sin(dt2*0.031)*0.025;
+
+    // Drifting wisps
+    for(const w of dreamWisps){
+      w.t+=dt*w.spd;
+      w.mesh.position.x=w.cx+Math.cos(w.t)*w.rx;
+      w.mesh.position.y=w.cy+Math.sin(w.t*0.72)*w.ry;
+      w.mesh.position.z=w.cz+Math.sin(w.t*0.45)*w.rz;
+    }
+
+    // Scintillating stars
+    for(const s of dreamScintStars){
+      s.mat.opacity=s.baseOp*(0.55+0.45*Math.sin(dt2*s.speed+s.phase));
+    }
+
+    // Parallax — nebula layers shift subtly with mouse/tilt
+    dreamMouseSmooth.x+=(dreamMouse.x-dreamMouseSmooth.x)*0.032;
+    dreamMouseSmooth.y+=(dreamMouse.y-dreamMouseSmooth.y)*0.032;
+    if(dreamLayers[0]) dreamLayers[0].position.set(dreamMouseSmooth.x*2.0,dreamMouseSmooth.y*1.4,0);
+    if(dreamLayers[1]) dreamLayers[1].position.set(dreamMouseSmooth.x*3.8,dreamMouseSmooth.y*2.6,0);
+    if(dreamLayers[2]) dreamLayers[2].position.set(dreamMouseSmooth.x*5.5,dreamMouseSmooth.y*3.8,0);
 
     // Tick shooting stars — fade out and remove finished ones
     for(let i=dreamShooters.length-1;i>=0;i--){
@@ -1428,6 +1490,11 @@ let dreamControls=null;
 let dreamNoiseNode=null, dreamGainNode=null;
 let dreamLayers=[];
 let dreamShooters=[], dreamShootTimer=null;
+let dreamWisps=[], dreamScintStars=[];
+let dreamBellTimer=null;
+let dreamBassNode=null, dreamBassGain=null;
+let dreamMouse={x:0,y:0}, dreamMouseSmooth={x:0,y:0};
+let dreamNebulaB=null, dreamNebulaC=null;
 
 // Soft circular sprite — prevents square pixel artefacts on PointsMaterial
 function _makeDreamSprite(feather){
@@ -1476,7 +1543,7 @@ function startDreaming(){
   dreamScene=new THREE.Scene();
   dreamScene.background=new THREE.Color(0x04000d);
   dreamCamera=new THREE.PerspectiveCamera(62,innerWidth/innerHeight,0.1,8000);
-  dreamCamera.position.set(0,30,130);
+  dreamCamera.position.set(0,30,175);
 
   dreamControls=new OrbitControls(dreamCamera,renderer.domElement);
   dreamControls.enableDamping=true;
@@ -1507,38 +1574,54 @@ function startDreaming(){
     return              [0.92,0.72,1.00]; // nebula-lit lavender outlier
   }
   // Tier 1: vast field of faint distant stars
-  { const n=28000, p=new Float32Array(n*3), c=new Float32Array(n*3);
-    for(let i=0;i<n;i++){ const [x,y,z]=_starPos(600,3200,0.40); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()); const br=0.25+Math.random()*0.45; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
+  { const n=44000, p=new Float32Array(n*3), c=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ const [x,y,z]=_starPos(600,3600,0.40); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()); const br=0.22+Math.random()*0.42; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('color',new THREE.BufferAttribute(c,3));
-    dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:0.55,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.70,depthWrite:false,alphaTest:0.01}))); }
+    dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:0.52,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.68,depthWrite:false,alphaTest:0.01}))); }
   // Tier 2: mid-field stars, brighter and more varied
-  { const n=5500, p=new Float32Array(n*3), c=new Float32Array(n*3);
-    for(let i=0;i<n;i++){ const [x,y,z]=_starPos(250,1200,0.30); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()); const br=0.55+Math.random()*0.45; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
+  { const n=8000, p=new Float32Array(n*3), c=new Float32Array(n*3);
+    for(let i=0;i<n;i++){ const [x,y,z]=_starPos(250,1400,0.30); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()); const br=0.50+Math.random()*0.50; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('color',new THREE.BufferAttribute(c,3));
     dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:1.05,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.88,depthWrite:false,alphaTest:0.01}))); }
   // Tier 3: handful of nearby bright foreground stars
-  { const n=320, p=new Float32Array(n*3), c=new Float32Array(n*3);
+  { const n=420, p=new Float32Array(n*3), c=new Float32Array(n*3);
     for(let i=0;i<n;i++){ const [x,y,z]=_starPos(100,500,0.20); p[i*3]=x;p[i*3+1]=y;p[i*3+2]=z; const col=_starCol(Math.random()*0.6); const br=0.80+Math.random()*0.20; c[i*3]=col[0]*br;c[i*3+1]=col[1]*br;c[i*3+2]=col[2]*br; }
     const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('color',new THREE.BufferAttribute(c,3));
     dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:2.1,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.95,depthWrite:false,alphaTest:0.01,blending:THREE.AdditiveBlending}))); }
+  // Milky Way band — dense arc of faint stars strongly concentrated along y≈0
+  { const n=16000, p=new Float32Array(n*3), c=new Float32Array(n*3);
+    for(let i=0;i<n;i++){
+      const r=500+Math.random()*2800, th=Math.random()*Math.PI*2;
+      const bw=(0.05+Math.random()*0.07)*r;
+      const y=(Math.random()-0.5)*bw;
+      p[i*3]=r*Math.cos(th); p[i*3+1]=y; p[i*3+2]=r*Math.sin(th);
+      const col=_starCol(Math.random());
+      const br=0.10+Math.random()*0.18;
+      c[i*3]=col[0]*br+0.015; c[i*3+1]=col[1]*br+0.010; c[i*3+2]=col[2]*br+0.025;
+    }
+    const g=new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(p,3)); g.setAttribute('color',new THREE.BufferAttribute(c,3));
+    dreamScene.add(new THREE.Points(g,new THREE.PointsMaterial({size:0.38,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.52,depthWrite:false,alphaTest:0.01}))); }
 
   // ── Layer 0: Outer haze — deep purple/violet, large, very transparent ──
   const p0=new THREE.Object3D(); dreamScene.add(p0); dreamLayers.push(p0);
   p0.add(_mkCloud(8000,110,70,95,
     [[0.28,0.06,0.82],[0.18,0.04,0.68],[0.42,0.08,0.88],[0.22,0.10,0.72]],
     6.0, 0.055, true));
+  p0.scale.setScalar(0.78);
 
   // ── Layer 1: Main body — pink-purple / magenta ──
   const p1=new THREE.Object3D(); dreamScene.add(p1); dreamLayers.push(p1);
   p1.add(_mkCloud(7000,75,48,65,
     [[0.88,0.18,0.78],[0.72,0.12,0.90],[0.95,0.30,0.82],[0.60,0.08,0.88]],
     4.2, 0.075, true));
+  p1.scale.setScalar(0.76);
 
   // ── Layer 2: Inner glow — bright pink-white core ──
   const p2=new THREE.Object3D(); dreamScene.add(p2); dreamLayers.push(p2);
   p2.add(_mkCloud(4500,40,26,36,
     [[1.00,0.60,0.95],[0.98,0.45,0.88],[0.95,0.80,1.00],[1.00,0.70,0.90]],
     3.0, 0.11, true));
+  p2.scale.setScalar(0.73);
 
   // ── Star clusters inside nebula (bright, normal blending) ──
   dreamScene.add(_mkCloud(3000,130,80,110,
@@ -1549,6 +1632,82 @@ function startDreaming(){
   dreamScene.add(_mkCloud(500,160,90,140,
     [[1.0,1.0,1.0],[1.0,0.80,0.96],[0.85,0.80,1.0]],
     2.4, 0.90, true));
+
+  // ── Second nebula — cool blue-teal, upper-left far field ──
+  dreamNebulaB=new THREE.Object3D();
+  dreamNebulaB.position.set(230,-75,-260);
+  dreamNebulaB.scale.setScalar(0.52);
+  dreamNebulaB.add(_mkCloud(3200,44,28,38,
+    [[0.14,0.52,0.92],[0.10,0.42,0.80],[0.22,0.68,0.90],[0.08,0.36,0.74]],
+    5.5, 0.046, true));
+  dreamNebulaB.add(_mkCloud(1600,22,13,18,
+    [[0.42,0.82,1.00],[0.32,0.72,0.95],[0.58,0.88,0.98],[0.28,0.62,0.90]],
+    3.6, 0.062, true));
+  dreamScene.add(dreamNebulaB);
+
+  // ── Third nebula — warm amber/orange, lower-right far field ──
+  dreamNebulaC=new THREE.Object3D();
+  dreamNebulaC.position.set(-290,110,180);
+  dreamNebulaC.scale.setScalar(0.44);
+  dreamNebulaC.add(_mkCloud(2600,36,22,30,
+    [[0.92,0.48,0.10],[0.82,0.36,0.08],[0.88,0.58,0.16],[0.75,0.30,0.06]],
+    5.0, 0.040, true));
+  dreamNebulaC.add(_mkCloud(1200,18,11,15,
+    [[1.0,0.72,0.28],[0.95,0.60,0.20],[1.0,0.80,0.38]],
+    3.2, 0.055, true));
+  dreamScene.add(dreamNebulaC);
+
+  // ── Distant galaxy clusters — faint smudges spread across the sky ──
+  const _galaxyPos=[
+    [390,100,-275,160,15,7,10], [-320,-55,230,140,13,6,9],
+    [195,270,-370,180,16,8,11], [-190,200,310,150,14,7,10],
+    [440,-130,195,130,12,6,8],  [-265,165,-215,170,15,7,10],
+    [140,-210,350,145,13,6,9],  [-420,80,120,200,18,9,13],
+    [310,290,-110,120,11,5,8],  [-150,-280,240,160,14,7,10],
+    [480,-60,-180,110,10,5,7],  [-80,320,280,190,17,8,12],
+    [250,-220,-320,135,12,6,8], [-360,30,-350,155,14,6,10],
+  ];
+  for(const [gx,gy,gz,n,rx,ry,rz] of _galaxyPos){
+    const gc=_mkCloud(n,rx,ry,rz,
+      [[1.0,0.88,0.70],[0.95,0.80,0.60],[0.88,0.78,1.0],[1.0,0.92,0.78],[0.80,0.90,1.0]],
+      4.2, 0.12, true);
+    gc.position.set(gx,gy,gz);
+    dreamScene.add(gc);
+  }
+
+  // ── Drifting wisps — slow elliptical orbits through nebula ──
+  const _wispDefs=[
+    {cx:55,cy:18,cz:-38, rx:42,ry:18,rz:32, spd:0.045, phase:0.0},
+    {cx:-48,cy:-12,cz:28, rx:36,ry:15,rz:26, spd:0.029, phase:2.1},
+    {cx:18,cy:32,cz:48, rx:28,ry:22,rz:20, spd:0.058, phase:4.5},
+  ];
+  dreamWisps=[];
+  for(const w of _wispDefs){
+    const m=_mkCloud(500,20,11,15,
+      [[0.85,0.28,0.90],[0.70,0.14,0.80],[0.95,0.48,0.88],[0.62,0.18,0.76]],
+      5.8, 0.032, true);
+    m.position.set(w.cx,w.cy,w.cz);
+    dreamScene.add(m);
+    dreamWisps.push({mesh:m,cx:w.cx,cy:w.cy,cz:w.cz,rx:w.rx,ry:w.ry,rz:w.rz,spd:w.spd,t:w.phase});
+  }
+
+  // ── Scintillating foreground stars — individual twinkling points ──
+  dreamScintStars=[];
+  const _scintCols=[[1,1,1],[1,0.85,0.95],[0.85,0.85,1],[1,0.95,0.75],[0.80,0.92,1]];
+  for(let i=0;i<26;i++){
+    const r=95+Math.random()*290;
+    const th=Math.random()*Math.PI*2, ph=Math.acos(2*Math.random()-1);
+    const sp=new Float32Array([r*Math.sin(ph)*Math.cos(th),r*Math.sin(ph)*Math.sin(th),r*Math.cos(ph)]);
+    const cv=_scintCols[Math.floor(Math.random()*_scintCols.length)];
+    const ca=new Float32Array([cv[0],cv[1],cv[2]]);
+    const sg=new THREE.BufferGeometry();
+    sg.setAttribute('position',new THREE.BufferAttribute(sp,3));
+    sg.setAttribute('color',new THREE.BufferAttribute(ca,3));
+    const sm=new THREE.PointsMaterial({size:2.6+Math.random()*1.8,map:_dreamStarSprite,vertexColors:true,sizeAttenuation:true,transparent:true,opacity:0.9,depthWrite:false,alphaTest:0.01,blending:THREE.AdditiveBlending});
+    const spts=new THREE.Points(sg,sm);
+    dreamScene.add(spts);
+    dreamScintStars.push({mat:sm,phase:Math.random()*Math.PI*2,speed:0.7+Math.random()*1.9,baseOp:0.60+Math.random()*0.40});
+  }
 
   // Shooting stars
   function _spawnShooter(){
@@ -1596,18 +1755,50 @@ function _startDreamNoise(){
   dreamGainNode.gain.linearRampToValueAtTime(0.07,audioCtx.currentTime+2.5);
   dreamNoiseNode.connect(f1); f1.connect(f2); f2.connect(dreamGainNode); dreamGainNode.connect(audioCtx.destination);
   dreamNoiseNode.start();
+
+  // Sub-bass hum — barely heard, more felt
+  const bassOsc=audioCtx.createOscillator();
+  bassOsc.type='sine'; bassOsc.frequency.value=38+Math.random()*9;
+  dreamBassGain=audioCtx.createGain();
+  dreamBassGain.gain.setValueAtTime(0,audioCtx.currentTime);
+  dreamBassGain.gain.linearRampToValueAtTime(0.016,audioCtx.currentTime+4.0);
+  bassOsc.connect(dreamBassGain); dreamBassGain.connect(audioCtx.destination);
+  bassOsc.start(); dreamBassNode=bassOsc;
+
+  // Distant bell tones — random interval 30–80 s
+  function _playDreamBell(){
+    if(!dreamActive||!audioCtx||audioMuted) return;
+    const t=audioCtx.currentTime;
+    const freq=396+Math.random()*252;
+    const bo=audioCtx.createOscillator(); bo.type='sine'; bo.frequency.value=freq;
+    const bg=audioCtx.createGain();
+    bg.gain.setValueAtTime(0,t);
+    bg.gain.linearRampToValueAtTime(0.008,t+0.18);
+    bg.gain.exponentialRampToValueAtTime(0.0001,t+5.5);
+    bo.connect(bg); bg.connect(audioCtx.destination);
+    bo.start(t); bo.stop(t+6.0);
+    dreamBellTimer=setTimeout(_playDreamBell,30000+Math.random()*50000);
+  }
+  dreamBellTimer=setTimeout(_playDreamBell,10000+Math.random()*14000);
 }
 
 function stopDreaming(){
   if(!dreamActive) return;
   dreamActive=false;
   clearTimeout(dreamShootTimer); dreamShootTimer=null; dreamShooters=[];
+  clearTimeout(dreamBellTimer); dreamBellTimer=null;
+  dreamWisps=[]; dreamScintStars=[];
+  renderer.toneMappingExposure=0.85;
   controls.enabled=!flyActive;
   if(!flyActive) document.getElementById('fly-btn').style.display='block';
   if(dreamControls){ dreamControls.dispose(); dreamControls=null; }
   if(dreamGainNode){
     try{ dreamGainNode.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.8); }catch(e){}
     setTimeout(()=>{ try{ dreamNoiseNode&&dreamNoiseNode.stop(); }catch(e){} dreamNoiseNode=null; dreamGainNode=null; },900);
+  }
+  if(dreamBassNode){
+    try{ dreamBassGain&&dreamBassGain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.8); }catch(e){}
+    setTimeout(()=>{ try{ dreamBassNode&&dreamBassNode.stop(); }catch(e){} dreamBassNode=null; dreamBassGain=null; },900);
   }
   const overlay=document.getElementById('dream-overlay');
   overlay.classList.remove('visible');
@@ -1617,7 +1808,7 @@ function stopDreaming(){
       dreamScene.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material) o.material.dispose(); });
       dreamScene=null;
     }
-    dreamCamera=null; dreamLayers=[];
+    dreamCamera=null; dreamLayers=[]; dreamNebulaB=null; dreamNebulaC=null;
   },650);
 }
 
@@ -1625,6 +1816,32 @@ document.getElementById('dream-btn').addEventListener('click',()=>{
   if(dreamActive) stopDreaming(); else startDreaming();
 });
 document.getElementById('dream-exit').addEventListener('click',stopDreaming);
+
+// Fullscreen
+const _fsBtn=document.getElementById('fullscreen-btn');
+_fsBtn.addEventListener('click',()=>{
+  if(!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+});
+document.addEventListener('fullscreenchange',()=>{
+  _fsBtn.textContent=document.fullscreenElement?'⤡':'⤢';
+});
+
+// Hide / show UI
+const _hideBtn=document.getElementById('hide-btn');
+const _uiTargets=['fly-btn','sound-btn','dream-btn','fullscreen-btn','hint','fly-timer','playback-controls','fly-hud','fly-info'];
+let _uiHidden=false;
+_hideBtn.addEventListener('click',()=>{
+  _uiHidden=!_uiHidden;
+  _uiTargets.forEach(id=>{
+    const el=document.getElementById(id); if(!el)return;
+    el.style.transition='opacity 0.35s ease';
+    el.style.opacity=_uiHidden?'0':'';
+    el.style.pointerEvents=_uiHidden?'none':'';
+  });
+  _hideBtn.style.opacity=_uiHidden?'0.18':'';
+  _hideBtn.textContent=_uiHidden?'◉':'⊙';
+});
 
 animate();
 </script>
